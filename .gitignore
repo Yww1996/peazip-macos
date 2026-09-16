@@ -1,0 +1,9 @@
+# 构建产物：可由源码重建，不入库
+build/
+.build/
+*.o
+*.dSYM
+
+# 本地杂项
+.DS_Store
+*.log
