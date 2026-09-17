@@ -138,6 +138,10 @@ final class AppModel: ObservableObject {
     @Published var opSheet: OpSheet?
     @Published var logLines: [String] = []
     @Published var busy = false
+    /// What is running right now, and how the last one ended. Both go in the status bar:
+    /// the modal log panel is reserved for failures.
+    @Published var currentOp: String?
+    @Published var lastResult: String?
 
     // The sheet drives the "add" form
     @Published var addFormat: ArchiveEngine.Format = .zip
@@ -355,6 +359,12 @@ final class AppModel: ObservableObject {
     /// TCC database (tccutil only resets entries, never adds them). Opening the pane is the
     /// entire extent of what software is allowed to do here; the switch and the
     /// authentication are the user's.
+    /// Re-open the log panel on demand, for when the summary in the status bar is not
+    /// enough and the operation is long gone.
+    func showLastLog() {
+        opSheet = OpSheet(title: lastResult ?? "上次操作日志")
+    }
+
     static func openFullDiskAccessSettings() {
         let candidates = [
             "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
@@ -786,6 +796,13 @@ final class AppModel: ObservableObject {
     }
 
     var statusText: String {
+        // Operations report here instead of in a modal panel.
+        if let op = currentOp { return "⏳ 正在处理：\(op)" }
+        if let r = lastResult { return r }
+        return itemSummary
+    }
+
+    private var itemSummary: String {
         let dirs = items.filter(\.isDirectory).count
         let files = items.count - dirs
         let total = items.filter { !$0.isDirectory }.reduce(Int64(0)) { $0 + $1.size }
@@ -815,8 +832,13 @@ final class AppModel: ObservableObject {
                      quiet: Bool = false,
                      _ work: @escaping (@escaping (String) -> Void) -> ArchiveEngine.Result) {
         logLines = note.map { ["▸ \(title)", "⚠️ \($0)"] } ?? ["▸ \(title)"]
-        if !quiet { opSheet = OpSheet(title: title) }
+        // Success does NOT raise a panel. A modal carrying 7-Zip's copyright banner after
+        // every compress/extract is pure noise — it is what made the app feel like a script
+        // wrapper. Progress goes to the status bar; failures raise the panel below; the log
+        // stays reachable from 归档 ▸ 显示上次操作日志.
         busy = true
+        currentOp = quiet ? nil : title
+        lastResult = nil
         let append: (String) -> Void = { [weak self] line in
             DispatchQueue.main.async { self?.logLines.append(line) }
         }
@@ -829,8 +851,16 @@ final class AppModel: ObservableObject {
                 if !r.ok { self.logLines.append(contentsOf: r.output.split(separator: "\n").suffix(12).map(String.init)) }
                 if r.ok, let reveal { NSWorkspace.shared.activateFileViewerSelecting([reveal]) }
                 self.busy = false
-                // A quiet operation only makes itself heard when it goes wrong.
-                if quiet && !r.ok { self.opSheet = OpSheet(title: title) }
+                self.currentOp = nil
+                if r.ok {
+                    if !quiet { self.lastResult = "✅ \(title)" }
+                    appLog.notice("面板: 成功不弹（\(title, privacy: .public)）")
+                } else {
+                    // Failures always surface, with the engine's own last lines attached.
+                    self.lastResult = "❌ \(title)"
+                    self.opSheet = OpSheet(title: "\(title) — 失败")
+                    appLog.notice("面板: 弹出失败日志（\(title, privacy: .public)）")
+                }
                 // While browsing, the list belongs to the archive: rescanning the
                 // filesystem would show the containing folder instead of the new state
                 // (this is what makes add/delete appear to do nothing).

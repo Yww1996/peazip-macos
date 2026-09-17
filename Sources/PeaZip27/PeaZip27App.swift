@@ -446,6 +446,8 @@ struct PeaZip27App: App {
                     .keyboardShortcut("o", modifiers: [.command])
                     .disabled(model.selection.isEmpty)
                 Divider()
+                Button("显示上次操作日志") { model.showLastLog() }
+                Divider()
                 // The menu has to follow the mode: while browsing inside an archive, the
                 // filesystem commands would operate on synthetic paths that do not exist.
                 if model.isBrowsingArchive {
