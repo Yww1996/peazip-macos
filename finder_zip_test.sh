@@ -5,9 +5,17 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-ZIP="/Users/yuwei/Desktop/Hermes/🦅 clarie - 审查/一管一策报告/待审核/现场签单-涠洲12-2油田海管物流腐蚀因子检测（2026年7-8月）.zip"
+# An archive to test with can be passed as $1. With no argument the script builds a
+# throwaway one, so it carries no reference to any real document.
+ZIP="${1:-}"
+if [ -z "$ZIP" ] || [ ! -f "$ZIP" ]; then
+  WORK=$(mktemp -d)
+  printf 'sample\n' > "$WORK/示例.txt"
+  (cd "$WORK" && zip -q demo.zip 示例.txt)
+  ZIP="$WORK/demo.zip"
+fi
 echo "目标压缩包:"
-if [ -f "$ZIP" ]; then echo "  ✅ 存在"; else echo "  ❌ 不存在，改用测试包"; fi
+if [ -f "$ZIP" ]; then echo "  ✅ 存在 ($(basename "$ZIP"))"; else echo "  ❌ 不存在"; exit 1; fi
 
 echo
 echo "############ 1) 构建 + 安装 ############"
