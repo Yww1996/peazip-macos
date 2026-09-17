@@ -302,7 +302,8 @@ final class AppModel: ObservableObject {
         let tmp = previewDir ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("peazip27-preview-\(UUID().uuidString)")
         previewDir = tmp
-        run(title: "打开 \(item.name)") { line in
+        // quiet: peeking at a file should not throw a modal sheet over the window
+        run(title: "打开 \(item.name)", quiet: true) { line in
             let r = ArchiveEngine.extractEntries(archive, paths: [inner], to: tmp, onLine: line)
             if r.ok {
                 let f = tmp.appendingPathComponent(inner)
@@ -595,6 +596,10 @@ final class AppModel: ObservableObject {
     }
 
     func goBack() {
+        // Inside an archive, "back" means leaving the archive: that is where the user came
+        // from. Without this the path changed while the list stayed on the archive, because
+        // reload() deliberately bails while browsing.
+        if isBrowsingArchive { exitArchive(); return }
         guard let prev = backStack.popLast() else { return }
         forwardStack.append(currentURL)
         currentURL = prev
@@ -603,6 +608,7 @@ final class AppModel: ObservableObject {
     }
 
     func goForward() {
+        guard !isBrowsingArchive else { return }
         guard let next = forwardStack.popLast() else { return }
         backStack.append(currentURL)
         currentURL = next
@@ -627,8 +633,8 @@ final class AppModel: ObservableObject {
         go(to: parent)
     }
 
-    var canGoBack: Bool { !backStack.isEmpty }
-    var canGoForward: Bool { !forwardStack.isEmpty }
+    var canGoBack: Bool { isBrowsingArchive || !backStack.isEmpty }
+    var canGoForward: Bool { !isBrowsingArchive && !forwardStack.isEmpty }
     var canGoUp: Bool { isBrowsingArchive || currentURL.path != "/" }
 
     /// Clickable path components for the breadcrumb bar.
@@ -739,11 +745,15 @@ final class AppModel: ObservableObject {
 
     // MARK: - Operations
 
+    /// `quiet` operations (double-click previews) do not raise the log sheet — a sheet
+    /// popping up every time you peek at a file is worse than no feedback. A failure
+    /// still surfaces itself, so nothing is swallowed.
     private func run(title: String,
                      reveal: URL? = nil,
+                     quiet: Bool = false,
                      _ work: @escaping (@escaping (String) -> Void) -> ArchiveEngine.Result) {
         logLines = ["▸ \(title)"]
-        opSheet = OpSheet(title: title)
+        if !quiet { opSheet = OpSheet(title: title) }
         busy = true
         let append: (String) -> Void = { [weak self] line in
             DispatchQueue.main.async { self?.logLines.append(line) }
@@ -757,6 +767,8 @@ final class AppModel: ObservableObject {
                 if !r.ok { self.logLines.append(contentsOf: r.output.split(separator: "\n").suffix(12).map(String.init)) }
                 if r.ok, let reveal { NSWorkspace.shared.activateFileViewerSelecting([reveal]) }
                 self.busy = false
+                // A quiet operation only makes itself heard when it goes wrong.
+                if quiet && !r.ok { self.opSheet = OpSheet(title: title) }
                 // While browsing, the list belongs to the archive: rescanning the
                 // filesystem would show the containing folder instead of the new state
                 // (this is what makes add/delete appear to do nothing).

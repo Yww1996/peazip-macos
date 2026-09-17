@@ -11,6 +11,7 @@ struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     @State private var sidebarSel: URL?
     @State private var query = ""
+    @State private var sortOrder = [KeyPathComparator(\FileItem.name)]
 
     var body: some View {
         NavigationSplitView {
@@ -39,7 +40,16 @@ struct ContentView: View {
             if sidebarSel?.path != new.path && !model.favorites.contains(where: { $0.url.path == new.path }) {
                 sidebarSel = nil
             }
+            // A leftover search term made every freshly opened folder look empty, which
+            // reads as "the app is broken" rather than "your filter is still on".
+            query = ""
+            model.selection.removeAll()
         }
+        .onChange(of: model.openArchive) { _, _ in query = "" }
+        // These live in the toolbar now, so they have to take effect immediately rather
+        // than only at next launch.
+        .onChange(of: model.showHidden) { _, _ in model.reload() }
+        .onChange(of: model.ascending) { _, _ in model.reload() }
         .sheet(item: $model.opSheet) { sheet in
             if sheet.title.hasPrefix("添加到压缩包") && !model.busy && model.logLines.isEmpty {
                 AddArchiveSheet()
@@ -60,6 +70,18 @@ struct ContentView: View {
                 .disabled(!model.canGoForward).help("前进")
             Button { model.goUp() } label: { Image(systemName: "arrow.up") }
                 .disabled(!model.canGoUp).help("向上")
+            // View options used to live only in Settings and needed a relaunch to take
+            // effect, which made them look broken.
+            Menu {
+                Toggle("显示隐藏文件", isOn: $model.showHidden)
+                Toggle("反向排列", isOn: $model.ascending)
+                Divider()
+                Button("刷新列表") { model.isBrowsingArchive ? model.loadArchiveEntries() : model.reload() }
+            } label: {
+                Image(systemName: "eye")
+            }
+            .menuIndicator(.hidden)
+            .help("显示选项")
         }
         if model.isBrowsingArchive {
             // Archive browsing: file-management actions make no sense here (the paths are
@@ -125,9 +147,15 @@ struct ContentView: View {
         return model.items.filter { $0.name.localizedCaseInsensitiveContains(query) }
     }
 
+    /// Clicking a column header re-orders. An explicit sort overrides the folders-first
+    /// default, which is what a header click is understood to mean.
+    private var displayed: [FileItem] {
+        filtered.sorted(using: sortOrder)
+    }
+
     private var fileList: some View {
-        Table(filtered, selection: $model.selection) {
-            TableColumn("名称") { item in
+        Table(displayed, selection: $model.selection, sortOrder: $sortOrder) {
+            TableColumn("名称", value: \.name) { item in
                 HStack(spacing: 7) {
                     Image(systemName: item.symbol)
                         .foregroundStyle(item.tint)
@@ -135,31 +163,34 @@ struct ContentView: View {
                     Text(item.name).lineLimit(1)
                 }
                 .contentShape(Rectangle())
-                // Dragging an entry out to Finder extracts just that entry into a scratch
-                // folder and hands Finder the file. Using a file representation means the
-                // extraction can happen while Finder is already asking for the file, so a
-                // large entry does not stall the drag.
+                // Dragging out: an entry inside an archive is extracted into a scratch
+                // folder and handed to Finder; a real file is handed over as-is. Using a
+                // file representation means the extraction can happen while Finder is
+                // already asking for the file, so a large entry does not stall the drag.
                 .onDrag {
-                    guard item.fromArchive else { return NSItemProvider() }
-                    let provider = NSItemProvider()
-                    provider.suggestedName = item.name
-                    provider.registerFileRepresentation(
-                        forTypeIdentifier: UTType.item.identifier,
-                        fileOptions: [], visibility: .all
-                    ) { completion in
-                        model.extractForDrag(item) { url in
-                            completion(url, false, url == nil ? DragFailure() : nil)
+                    if item.fromArchive {
+                        let provider = NSItemProvider()
+                        provider.suggestedName = item.name
+                        provider.registerFileRepresentation(
+                            forTypeIdentifier: UTType.item.identifier,
+                            fileOptions: [], visibility: .all
+                        ) { completion in
+                            model.extractForDrag(item) { url in
+                                completion(url, false, url == nil ? DragFailure() : nil)
+                            }
+                            return nil
                         }
-                        return nil
+                        return provider
                     }
-                    return provider
+                    // Filesystem rows drag as themselves (Finder copies them out).
+                    return NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
                 }
             }
-            TableColumn("类型") { Text($0.kind).foregroundStyle(.secondary) }
+            TableColumn("类型", value: \.kind) { Text($0.kind).foregroundStyle(.secondary) }
                 .width(min: 80, ideal: 110)
-            TableColumn("大小") { Text($0.sizeText).monospacedDigit().foregroundStyle(.secondary) }
+            TableColumn("大小", value: \.size) { Text($0.sizeText).monospacedDigit().foregroundStyle(.secondary) }
                 .width(min: 60, ideal: 84)
-            TableColumn("修改日期") { Text($0.dateText).monospacedDigit().foregroundStyle(.secondary) }
+            TableColumn("修改日期", value: \.modified) { Text($0.dateText).monospacedDigit().foregroundStyle(.secondary) }
                 .width(min: 110, ideal: 136)
         }
         .environment(\.defaultMinListRowHeight, 26)
@@ -223,7 +254,9 @@ struct SidebarView: View {
                 ForEach(model.volumes) { row($0) }
             }
             Section("历史") {
-                ForEach(Array(model.backStack.suffix(6).enumerated()), id: \.offset) { _, u in
+                // Identified by URL, not by array offset: an offset changes whenever the
+                // list shifts, so SwiftUI rebuilds the rows and the selection is lost.
+                ForEach(Array(model.backStack.suffix(6).reversed()), id: \.self) { u in
                     Label(u.lastPathComponent.isEmpty ? "/" : u.lastPathComponent, systemImage: "clock")
                         .lineLimit(1)
                         .tag(u)

@@ -293,15 +293,32 @@ struct PeaZip27App: App {
                     .keyboardShortcut("n", modifiers: [.command])
             }
             CommandMenu("归档") {
-                Button("添加到压缩包…") { model.beginAdd() }
-                    .keyboardShortcut("n", modifiers: [.command, .shift])
-                Button("解压到…") { model.beginExtract() }
-                    .keyboardShortcut("e", modifiers: [.command])
-                Button("测试完整性") { model.beginTest() }
-                    .keyboardShortcut("t", modifiers: [.command])
-                Divider()
-                Button("安全删除…") { model.beginSecureDelete() }
-                    .keyboardShortcut(.delete, modifiers: [.command, .shift])
+                // The menu has to follow the mode: while browsing inside an archive, the
+                // filesystem commands would operate on synthetic paths that do not exist.
+                if model.isBrowsingArchive {
+                    Button("添加文件…") { model.addFilesToOpenArchive() }
+                        .disabled(!model.canModifyOpenArchive)
+                    Button("从压缩包删除…") { model.deleteSelectedFromOpenArchive() }
+                        .disabled(model.selection.isEmpty || !model.canModifyOpenArchive)
+                    Divider()
+                    Button("解压选中项…") { model.extractFromOpenArchive(selectedOnly: true) }
+                        .disabled(model.selection.isEmpty)
+                        .keyboardShortcut("e", modifiers: [.command])
+                    Button("全部解压…") { model.extractFromOpenArchive(selectedOnly: false) }
+                    Divider()
+                    Button("关闭压缩包") { model.exitArchive() }
+                        .keyboardShortcut("w", modifiers: [.command])
+                } else {
+                    Button("添加到压缩包…") { model.beginAdd() }
+                        .keyboardShortcut("n", modifiers: [.command, .shift])
+                    Button("解压到…") { model.beginExtract() }
+                        .keyboardShortcut("e", modifiers: [.command])
+                    Button("测试完整性") { model.beginTest() }
+                        .keyboardShortcut("t", modifiers: [.command])
+                    Divider()
+                    Button("安全删除…") { model.beginSecureDelete() }
+                        .keyboardShortcut(.delete, modifiers: [.command, .shift])
+                }
             }
         }
 
