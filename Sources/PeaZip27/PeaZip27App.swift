@@ -63,6 +63,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
         NSApp.activate(ignoringOtherApps: true)
+        Self.ensureWindowAppears()
+    }
+
+    /// Nothing guarantees the launch window is actually presented. macOS remembers "this
+    /// app quit with no windows open" and that record SUPPRESSES the window at next launch
+    /// — `.defaultLaunchBehavior(.presented)` does not override it, and the record does not
+    /// live in the savedState directory we can delete. The app then runs with a live
+    /// process, a working engine and no window at all.
+    ///
+    /// So: verify, and if nothing showed up, drive our own 打开主窗口 menu item — the exact
+    /// same path ⌘N uses.
+    private static func ensureWindowAppears() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            let all = NSApp.windows
+            let inventory = all.map {
+                let t = $0.title.isEmpty ? "(无题)" : $0.title
+                return "\(t) 可见=\($0.isVisible) \(Int($0.frame.width))x\(Int($0.frame.height))"
+            }.joined(separator: " | ")
+            appLog.notice("窗口盘点 \(all.count, privacy: .public) 个: \(inventory, privacy: .public)")
+
+            // A window OBJECT can exist without ever having been ordered on screen — that
+            // is the state this app kept landing in. Ordering it front is enough, and far
+            // cheaper than creating another one.
+            if let w = all.first(where: { $0.contentViewController != nil && $0.frame.height > 200 }) {
+                // A restored frame can point at a Space or display that no longer exists,
+                // which leaves the window alive but nowhere: isVisible is true, the window
+                // server has never heard of it. Put it on a screen that exists, allow it to
+                // follow us into the active Space, and order it front regardless of
+                // activation.
+                if let screen = NSScreen.main ?? NSScreen.screens.first {
+                    let v = screen.visibleFrame
+                    var f = w.frame
+                    f.size.width = min(max(f.width, 1100), v.width)
+                    f.size.height = min(max(f.height, 600), v.height)
+                    f.origin.x = v.midX - f.width / 2
+                    f.origin.y = v.midY - f.height / 2
+                    w.setFrame(f, display: true)
+                }
+                w.collectionBehavior.insert(.moveToActiveSpace)
+                w.orderFrontRegardless()
+                w.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                let onScreen = w.screen != nil ? "是" : "否"
+                appLog.notice("已复位并提到前台 · 在屏=\(onScreen, privacy: .public) · occlusion=\(w.occlusionState.contains(.visible), privacy: .public)")
+                return
+            }
+            appLog.notice("没有可用窗口 —— 触发「打开主窗口」")
+            _ = openMainWindowViaMenu()
+        }
+    }
+
+    private static func openMainWindowViaMenu() -> Bool {
+        guard let main = NSApp.mainMenu else { return false }
+        for top in main.items {
+            guard let sub = top.submenu else { continue }
+            for item in sub.items where item.title.contains("打开主窗口") {
+                guard let action = item.action else { continue }
+                let ok = NSApp.sendAction(action, to: item.target, from: item)
+                appLog.notice("openMainWindowViaMenu → \(ok, privacy: .public)")
+                return ok
+            }
+        }
+        appLog.notice("openMainWindowViaMenu: 找不到菜单项")
+        return false
     }
 
     /// Closing the last window quits, like every other macOS archiver. The alternative is
