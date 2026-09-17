@@ -13,10 +13,10 @@ visible_count() {
 }
 
 echo "=== 1) 干净启动 ==="
-pkill -f "Contents/MacOS/PeaZip27" 2>/dev/null || true
+pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
 sleep 2
 open /Applications/PeaZip.app
-for _ in $(seq 1 24); do sleep 0.5; [ -n "$(pgrep -f 'Contents/MacOS/PeaZip27')" ] && break; done
+for _ in $(seq 1 24); do sleep 0.5; [ -n "$(pgrep -f 'Contents/MacOS/PeaZip')" ] && break; done
 sleep 2
 echo "  最大窗口: $(max_window)   可见窗口: $(visible_count)"
 
@@ -34,7 +34,7 @@ echo "=== 3) 紧接着再触发一次 ==="
 swift tools/service_call.swift /tmp/wintest "用 PeaZip 压缩为 7Z" 2>/dev/null | grep NSPerformService
 sleep 8
 echo "  最大窗口: $(max_window)   可见窗口: $(visible_count)"
-pgrep -lf "Contents/MacOS/PeaZip27" | sed 's/^/  进程: /'
+pgrep -lf "Contents/MacOS/PeaZip" | sed 's/^/  进程: /'
 echo
 echo "=== 4) 产物 ==="
 ls -la /tmp/wintest/ | sed 's/^/  /'

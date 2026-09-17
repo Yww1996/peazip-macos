@@ -26,10 +26,10 @@ for i in $(seq 1 "$LAUNCHES"); do
   # pkill only. `osascript -e 'tell app "PeaZip" to quit'` is NOT safe here: an Apple
   # Event aimed at a stopped app STARTS it and then quits it, so the quit lands on the
   # instance we are about to launch and the test blames the app for a harness bug.
-  pkill -f "Contents/MacOS/PeaZip27" 2>/dev/null || true
+  pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
   for _ in $(seq 1 20); do
     sleep 0.5
-    pgrep -f 'Contents/MacOS/PeaZip27' >/dev/null || break
+    pgrep -f 'Contents/MacOS/PeaZip' >/dev/null || break
   done
   sleep 1
   open "$APP"
@@ -47,7 +47,7 @@ for i in $(seq 1 "$LAUNCHES"); do
 
   sleep 20
   W2=$(main_window)
-  P=$(pgrep -f 'Contents/MacOS/PeaZip27' | head -1)
+  P=$(pgrep -f 'Contents/MacOS/PeaZip' | head -1)
   if [ -n "$W2" ] && [ -n "$P" ]; then
     echo "  第 $i 次: ✅ 窗口 $W → 20 秒后仍在（PID ${P}）"
     OK=$((OK+1))

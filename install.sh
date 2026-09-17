@@ -5,7 +5,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-SRC="$PWD/build/PeaZip27.app"
+SRC="$PWD/build/PeaZip-dev.app"
 DEST="/Applications/PeaZip.app"
 ORIG="/Applications/PeaZip.app"
 BACKUP="$HOME/Desktop/PeaZip-原版备份.app"
@@ -19,15 +19,15 @@ echo "############ 2) 备份原版（不删除、不覆盖已有备份）#######
 # pkill, not osascript quit: an Apple Event aimed at a stopped app STARTS it and then
 # quits it, so the queued quit lands on the instance launched moments later and the app
 # appears to die on startup.
-pkill -f "Contents/MacOS/PeaZip27" 2>/dev/null || true
+pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
 for _ in $(seq 1 20); do
-    pgrep -f "Contents/MacOS/PeaZip27" >/dev/null || break
+    pgrep -f "Contents/MacOS/PeaZip" >/dev/null || break
     sleep 0.5
 done
 # Match on the executable path, NOT on the .app folder name: the installed copy is
 # PeaZip.app while the dev build is PeaZip27.app, and a pattern tied to either one
 # silently matches nothing after the rename.
-pkill -f "Contents/MacOS/PeaZip27" 2>/dev/null || true
+pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
 pkill -x peazip 2>/dev/null || true
 sleep 2
 
@@ -58,9 +58,14 @@ echo "############ 3) 安装新 app ############"
 rm -rf "$DEST"
 ditto "$SRC" "$DEST" || { echo "❌ 复制失败"; exit 1; }
 # Take over the name: Finder/Dock/menu bar should all say "PeaZip", matching the request
-# to replace the original. CFBundleExecutable stays PeaZip27 (internal, and the plist
+# to replace the original. CFBundleExecutable is PeaZip, matching the bundle name (the plist
 # key still points at the real file name).
 PB="/usr/libexec/PlistBuddy"
+# The dev build ships as com.yww.pea27.dev so it cannot collide with the installed app
+# while testing. Installing must restore the real identity: TCC permission grants, the
+# default-handler choice and the Finder service registrations are all keyed to it.
+"$PB" -c "Set :CFBundleIdentifier com.yww.pea27" "$DEST/Contents/Info.plist" 2>/dev/null \
+  || "$PB" -c "Add :CFBundleIdentifier string com.yww.pea27" "$DEST/Contents/Info.plist"
 "$PB" -c "Set :CFBundleName PeaZip" "$DEST/Contents/Info.plist"
 "$PB" -c "Set :CFBundleDisplayName PeaZip" "$DEST/Contents/Info.plist"
 codesign --force --deep --sign - "$DEST" >/dev/null 2>&1
@@ -82,7 +87,7 @@ echo
 echo "############ 5) 从 /Applications 启动 ############"
 open "$DEST"
 PID=""
-for _ in $(seq 1 24); do sleep 0.5; PID=$(pgrep -f "Contents/MacOS/PeaZip27" | head -1); [ -n "$PID" ] && break; done
+for _ in $(seq 1 24); do sleep 0.5; PID=$(pgrep -f "Contents/MacOS/PeaZip" | head -1); [ -n "$PID" ] && break; done
 echo "  PID: ${PID:-未启动}"
 [ -z "$PID" ] && { echo "❌ 启动失败"; exit 1; }
 
@@ -107,7 +112,7 @@ log show --last 60s --predicate 'subsystem == "com.yww.pea27"' --style compact 2
 
 echo
 echo "############ 8) 归档往返自检（原版已不在 /Applications）############"
-"$DEST/Contents/MacOS/PeaZip27" --selftest 2>/dev/null | grep -E "7z 引擎|归档引擎|❌" | sed 's/^/  /'
+"$DEST/Contents/MacOS/PeaZip" --selftest 2>/dev/null | grep -E "7z 引擎|归档引擎|❌" | sed 's/^/  /'
 
 echo
 echo "############ 9) 最终状态 ############"

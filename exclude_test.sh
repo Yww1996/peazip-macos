@@ -20,10 +20,10 @@ setup() {
 }
 
 restart() {
-  pkill -f "Contents/MacOS/PeaZip27" 2>/dev/null || true
+  pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
   sleep 2
   open "$APP"
-  for _ in $(seq 1 24); do sleep 0.5; [ -n "$(pgrep -f 'Contents/MacOS/PeaZip27')" ] && break; done
+  for _ in $(seq 1 24); do sleep 0.5; [ -n "$(pgrep -f 'Contents/MacOS/PeaZip')" ] && break; done
   sleep 2
 }
 
@@ -37,7 +37,7 @@ run_case() {                       # run_case <说明>
 
 echo "############ 启动 app ############"
 restart
-echo "  进程: $(pgrep -f 'Contents/MacOS/PeaZip27' | head -1)"
+echo "  进程: $(pgrep -f 'Contents/MacOS/PeaZip' | head -1)"
 
 setup
 echo

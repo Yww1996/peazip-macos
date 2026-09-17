@@ -12,8 +12,12 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-APP="build/PeaZip27.app"
-EXE="PeaZip27"
+APP="build/PeaZip-dev.app"
+# Two different names on purpose: SwiftPM emits PeaZip27 (the target name), while the
+# executable INSIDE the bundle is PeaZip — that is what Activity Monitor and the Force Quit
+# window show, and "PeaZip27" there was a leftover from when the app was called "PeaZip 27".
+PRODUCT="PeaZip27"
+EXE="PeaZip"
 
 echo "=== 0) 构建（必须是新二进制，否则后面所有验证都是假的）==="
 swift build -c release 2>&1 | tail -3 || { echo "❌ 构建失败"; exit 1; }
@@ -22,8 +26,8 @@ echo
 echo "=== 1) 组装 bundle ==="
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/$EXE "$APP/Contents/MacOS/$EXE"
-A=$(md5 -q .build/release/$EXE); B=$(md5 -q "$APP/Contents/MacOS/$EXE")
+cp .build/release/$PRODUCT "$APP/Contents/MacOS/$EXE"
+A=$(md5 -q .build/release/$PRODUCT); B=$(md5 -q "$APP/Contents/MacOS/$EXE")
 if [ "$A" = "$B" ]; then echo "  二进制一致 ✅ ($A)"; else echo "  ❌ 二进制不一致（bundle 里是旧的）"; exit 1; fi
 
 if [ -f assets/AppIcon.icns ]; then
@@ -82,14 +86,18 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleExecutable</key><string>PeaZip27</string>
-    <key>CFBundleIdentifier</key><string>com.yww.pea27</string>
+    <key>CFBundleExecutable</key><string>PeaZip</string>
+    <!-- The dev build uses its own identity. With the SAME bundle id as the installed app,
+         macOS treats the second launch as a duplicate instance and terminates it — the dev
+         build died ~4s in, and it also competed for the default-handler registration and the
+         Finder services. install.sh rewrites this back to com.yww.pea27 when installing. -->
+    <key>CFBundleIdentifier</key><string>com.yww.pea27.dev</string>
     <key>CFBundleName</key><string>PeaZip</string>
     <key>CFBundleDisplayName</key><string>PeaZip</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.15</string>
-    <key>CFBundleVersion</key><string>15</string>
+    <key>CFBundleShortVersionString</key><string>0.16</string>
+    <key>CFBundleVersion</key><string>16</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <!-- Without CFBundleDevelopmentRegion, AppKit falls back to region "en" and renders
@@ -206,9 +214,15 @@ if codesign -v "$APP" 2>/dev/null; then echo "  ✅ 签名校验通过"; else ec
 
 echo
 echo "=== 4) 启动 ==="
-osascript -e 'tell application "PeaZip 27" to quit' >/dev/null 2>&1 || true
+# pkill, never `osascript quit`: an Apple Event aimed at a stopped app STARTS it and then
+# quits it, so the queued quit lands on the instance launched a moment later and the app
+# looks like it dies on startup.
 pkill -f "Contents/MacOS/$EXE" 2>/dev/null || true
-sleep 2
+for _ in $(seq 1 20); do
+  pgrep -f "Contents/MacOS/$EXE" >/dev/null || break
+  sleep 0.5
+done
+sleep 1
 open "$APP"
 PID=""
 for _ in $(seq 1 24); do

@@ -14,7 +14,7 @@ if [ -d "/Applications/PeaZip.app" ] && [ "${TEST_DEV_BUILD:-0}" != "1" ]; then
   APP="/Applications/PeaZip.app"
   echo "  测试对象: 已安装的 $APP"
 else
-  APP="$PWD/build/PeaZip27.app"
+  APP="$PWD/build/PeaZip-dev.app"
   echo "  测试对象: 开发构建 $APP"
 fi
 
@@ -29,7 +29,7 @@ ls -la /tmp/peatest/*.zip | sed 's/^/  /'
 echo
 echo "############ 3) 关掉旧实例 ############"
 osascript -e 'tell application "PeaZip" to quit' >/dev/null 2>&1 || true
-pkill -f "Contents/MacOS/PeaZip27" 2>/dev/null || true
+pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
 sleep 2
 
 echo
@@ -54,4 +54,4 @@ echo "############ 6) 系统是否已把本 app 登记为压缩包处理程序 #
 
 echo
 echo "############ 7) 进程仍健康 ############"
-ps -o pid,%cpu,stat -p $(pgrep -f "Contents/MacOS/PeaZip27" | head -1) 2>/dev/null | sed 's/^/  /'
+ps -o pid,%cpu,stat -p $(pgrep -f "Contents/MacOS/PeaZip" | head -1) 2>/dev/null | sed 's/^/  /'

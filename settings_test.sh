@@ -19,10 +19,10 @@ printf 'junk' > /tmp/preftest/素材/._正文.txt
 ls -la /tmp/preftest/素材/ | sed 's/^/  /'
 
 app_restart() {
-  pkill -f "Contents/MacOS/PeaZip27" 2>/dev/null || true
+  pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
   sleep 2
   open /Applications/PeaZip.app
-  for _ in $(seq 1 24); do sleep 0.5; [ -n "$(pgrep -f 'Contents/MacOS/PeaZip27')" ] && break; done
+  for _ in $(seq 1 24); do sleep 0.5; [ -n "$(pgrep -f 'Contents/MacOS/PeaZip')" ] && break; done
   sleep 2
 }
 

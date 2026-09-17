@@ -346,7 +346,7 @@ struct PeaZip27App: App {
     }
 
     static func selftest() -> Never {
-        print("PeaZip27 自检")
+        print("PeaZip 自检")
         print("  7z 引擎      : \(ArchiveEngine.sevenZip?.path ?? "❌ 未找到")")
         print("  引擎版本      : \(ArchiveEngine.version ?? "—")")
         print("  是否可用      : \(ArchiveEngine.isAvailable ? "✅" : "❌")")

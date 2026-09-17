@@ -7,8 +7,8 @@ cd "$(dirname "$0")"
 
 ORIG="/Applications/PeaZip.app"
 STASH="/tmp/PeaZip-original-stashed.app"
-APP="build/PeaZip27.app"
-EXE="$APP/Contents/MacOS/PeaZip27"
+APP="build/PeaZip-dev.app"
+EXE="$APP/Contents/MacOS/PeaZip"
 
 echo "############ 1) 重建（引擎会被打进 bundle）############"
 bash package.sh 2>&1 | grep -vE "appintents|linkd|Re-initialization|xpc:connection|SignalReady|SIGNAL|^\[[0-9]+/" | sed 's/^/  /'

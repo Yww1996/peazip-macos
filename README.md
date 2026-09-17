@@ -6,7 +6,7 @@
 
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-1B2534?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6.4-2C7BEA?style=flat-square)
-![version 0.15](https://img.shields.io/badge/version-0.15-0B4FC0?style=flat-square)
+![version 0.16](https://img.shields.io/badge/version-0.16-0B4FC0?style=flat-square)
 ![license MIT](https://img.shields.io/badge/license-MIT-4C8C4A?style=flat-square)
 
 </div>
@@ -51,7 +51,7 @@
 ```bash
 git clone https://github.com/Yww1996/peazip-macos.git
 cd peazip-macos
-./package.sh     # 构建 release → 组装 build/PeaZip27.app → 签名 → 启动并验证窗口
+./package.sh     # 构建 release → 组装 build/PeaZip-dev.app → 签名 → 启动并验证窗口
 ./install.sh     # 安装到 /Applications/PeaZip.app（备份原版，不删除）
 ```
 
@@ -88,7 +88,7 @@ tools/                     无头验证工具（窗口检查、图标导出、�
 不点界面也能验证，适合改完代码自己跑一遍：
 
 ```bash
-APP=/Applications/PeaZip.app/Contents/MacOS/PeaZip27
+APP=/Applications/PeaZip.app/Contents/MacOS/PeaZip
 
 $APP --selftest              # 引擎可用性：打包 → 测试 → 列表 → 解压 → 逐字节比对
 $APP --list <压缩包>         # 解析压缩包、显示根目录、逐层下钻
@@ -138,6 +138,6 @@ $APP --engine-check          # 检查引擎更新（不下载）
 
 <div align="center">
 
-**当前版本 `0.15`**
+**当前版本 `0.16`**
 
 </div>

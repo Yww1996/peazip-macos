@@ -30,7 +30,7 @@ chmod 700 "$WORK/只读目录"
 echo
 echo "############ 7z 自己在这种目录下会怎样（对照）############"
 chmod 500 "$WORK/只读目录"
-ENG=$(dirname "$(readlink -f /Applications/PeaZip.app/Contents/MacOS/PeaZip27)")/../Resources/bin/7z/7z
+ENG=$(dirname "$(readlink -f /Applications/PeaZip.app/Contents/MacOS/PeaZip)")/../Resources/bin/7z/7z
 if [ -x "$ENG" ]; then
   "$ENG" x -y -o"$WORK/只读目录/out" "$WORK/只读目录/测试包.zip" 2>&1 | tail -3 | sed 's/^/  /'
   echo "  → 退出码 ${PIPESTATUS[0]}"
