@@ -128,6 +128,45 @@ struct PeaZip27App: App {
            i + 1 < CommandLine.arguments.count {
             Self.listArchive(CommandLine.arguments[i + 1])
         }
+        // In-place editing, verifiable without clicking: --edit-test <archive>
+        if let i = CommandLine.arguments.firstIndex(of: "--edit-test"),
+           i + 1 < CommandLine.arguments.count {
+            Self.editTest(CommandLine.arguments[i + 1])
+        }
+    }
+
+    /// Headless check of in-place editing: add → verify → delete → verify, and the refusal
+    /// path for formats 7-Zip cannot write (RAR being the one users actually hit).
+    static func editTest(_ path: String) -> Never {
+        let url = URL(fileURLWithPath: path)
+        print("PeaZip 压缩包编辑自检")
+        print("  归档      : \(url.lastPathComponent)")
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            print("  ❌ 文件不存在"); exit(1)
+        }
+        print("  可修改    : \(ArchiveEngine.canModify(url) ? "✅ 是" : "❌ 否")")
+        if let r = ArchiveEngine.modifyRefusal(url) { print("  拒改说明  : \(r)") }
+
+        let before = ArchiveEngine.entries(in: url)
+        print("  编辑前    : \(before.count) 条")
+
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pea27-edit-\(UUID().uuidString).txt")
+        try? "edit test payload".write(to: tmp, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let add = ArchiveEngine.addInto(url, items: [tmp], onLine: nil)
+        if add.ok {
+            let after = ArchiveEngine.entries(in: url)
+            print("  添加      : ✅  条目 \(before.count) → \(after.count)  \(after.count == before.count + 1 ? "✅" : "❌")")
+            let del = ArchiveEngine.deleteEntries(url, paths: [tmp.lastPathComponent], onLine: nil)
+            let restored = ArchiveEngine.entries(in: url)
+            print("  删除      : \(del.ok ? "✅" : "❌")  条目 \(after.count) → \(restored.count)  \(restored.count == before.count ? "✅ 已还原" : "❌")")
+        } else {
+            print("  添加      : ❌ status=\(add.status)（预期行为，若上方显示不可修改）")
+            print("               \(add.output.split(separator: "\n").suffix(3).joined(separator: " / "))")
+        }
+        exit(0)
     }
 
     /// Headless mirror of the browsing path: parse the archive, show the root listing,

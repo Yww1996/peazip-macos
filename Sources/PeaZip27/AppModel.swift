@@ -318,7 +318,15 @@ final class AppModel: ObservableObject {
 
     private func cleanPreviewDir() {
         if let d = previewDir { try? FileManager.default.removeItem(at: d) }
+        if let d = dragDir { try? FileManager.default.removeItem(at: d) }
         previewDir = nil
+        dragDir = nil
+    }
+
+    /// Copy (not move) the file dropped from Finder into the open archive's folder first,
+    /// so the user sees what is being added. Not used for the drag-out path.
+    func importDropped(_ urls: [URL]) {
+        addItemsToOpenArchive(urls)
     }
 
     /// Extract the whole archive, or just the selected entries, next to the archive.
@@ -339,6 +347,99 @@ final class AppModel: ObservableObject {
             ArchiveEngine.extractEntries(archive, paths: paths, to: dest, onLine: line)
         }
     }
+
+    // MARK: - Editing an archive in place
+
+    var canModifyOpenArchive: Bool {
+        guard let a = openArchive else { return false }
+        return ArchiveEngine.canModify(a)
+    }
+
+    /// Why editing is unavailable, for the UI to show instead of a dead button.
+    var modifyHint: String? {
+        guard let a = openArchive else { return nil }
+        return ArchiveEngine.modifyRefusal(a)
+    }
+
+    /// Files dropped onto the window (or picked in the panel) are added into the open
+    /// archive. Refused formats say why rather than failing silently in the log.
+    func addItemsToOpenArchive(_ urls: [URL]) {
+        guard let archive = openArchive else { return }
+        guard let refusal = ArchiveEngine.modifyRefusal(archive) else {
+            let items = Self.existing(urls)
+            guard !items.isEmpty else { return }
+            run(title: "添加 \(items.count) 项 → \(archive.lastPathComponent)") { line in
+                ArchiveEngine.addInto(archive, items: items, onLine: line)
+            }
+            return
+        }
+        opSheet = OpSheet(title: "无法添加", detail: refusal)
+    }
+
+    func addFilesToOpenArchive() {
+        guard let archive = openArchive else { return }
+        if let refusal = ArchiveEngine.modifyRefusal(archive) {
+            opSheet = OpSheet(title: "无法添加", detail: refusal)
+            return
+        }
+        let p = NSOpenPanel()
+        p.canChooseFiles = true
+        p.canChooseDirectories = true
+        p.allowsMultipleSelection = true
+        p.prompt = "添加"
+        p.message = "选择要添加进 \(archive.lastPathComponent) 的文件或文件夹"
+        guard p.runModal() == .OK else { return }
+        addItemsToOpenArchive(p.urls)
+    }
+
+    func deleteSelectedFromOpenArchive() {
+        guard let archive = openArchive else { return }
+        if let refusal = ArchiveEngine.modifyRefusal(archive) {
+            opSheet = OpSheet(title: "无法删除", detail: refusal)
+            return
+        }
+        let paths = selection.compactMap { u in
+            items.first(where: { $0.url == u })?.entryPath
+        }
+        guard !paths.isEmpty else {
+            opSheet = OpSheet(title: "删除", detail: "请先选中要删除的内容")
+            return
+        }
+        // Destructive and irreversible: it rewrites the archive in place.
+        let alert = NSAlert()
+        alert.messageText = "从压缩包中删除 \(paths.count) 项？"
+        alert.informativeText = "将直接修改 \(archive.lastPathComponent) 本身，无法撤销。"
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "删除")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        run(title: "从压缩包删除 \(paths.count) 项") { line in
+            ArchiveEngine.deleteEntries(archive, paths: paths, onLine: line)
+        }
+    }
+
+    /// Extract a single entry to the scratch folder so it can be dragged out to Finder.
+    /// Completion runs on the main thread with the extracted URL, or nil on failure.
+    /// Dragging uses a file representation whose load handler can be asynchronous, so the
+    /// extraction does not have to finish before the drag begins.
+    func extractForDrag(_ item: FileItem, completion: @escaping (URL?) -> Void) {
+        guard let archive = openArchive, let inner = item.entryPath else {
+            completion(nil)
+            return
+        }
+        let tmp = dragDir ?? FileManager.default.temporaryDirectory
+            .appendingPathComponent("peazip27-drag-\(UUID().uuidString)")
+        dragDir = tmp
+        DispatchQueue.global(qos: .userInitiated).async {
+            let r = ArchiveEngine.extractEntries(archive, paths: [inner], to: tmp, onLine: nil)
+            let url = tmp.appendingPathComponent(inner)
+            DispatchQueue.main.async {
+                completion(r.ok && FileManager.default.fileExists(atPath: url.path) ? url : nil)
+            }
+        }
+    }
+
+    @Published var dragDir: URL?
 
     // MARK: - Finder services
     //
@@ -656,7 +757,10 @@ final class AppModel: ObservableObject {
                 if !r.ok { self.logLines.append(contentsOf: r.output.split(separator: "\n").suffix(12).map(String.init)) }
                 if r.ok, let reveal { NSWorkspace.shared.activateFileViewerSelecting([reveal]) }
                 self.busy = false
-                self.reload()
+                // While browsing, the list belongs to the archive: rescanning the
+                // filesystem would show the containing folder instead of the new state
+                // (this is what makes add/delete appear to do nothing).
+                if self.isBrowsingArchive { self.loadArchiveEntries() } else { self.reload() }
             }
         }
     }

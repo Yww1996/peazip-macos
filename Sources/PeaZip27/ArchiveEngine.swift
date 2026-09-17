@@ -18,6 +18,12 @@ enum ArchiveEngine {
             fixed.append(res.appendingPathComponent("bin/7z/7z").path)
         }
         fixed += [
+            // Our own installed layout first: a bare/binary build (or a copy run outside
+            // its bundle) still finds the engine the installed app carries. Without this
+            // the fallback list only knew the ORIGINAL PeaZip's layout, so the engine
+            // looked missing even on a machine where the app was installed.
+            "/Applications/PeaZip.app/Contents/Resources/bin/7z/7z",
+            // original PeaZip / upstream layouts
             "/Applications/PeaZip.app/Contents/MacOS/bin/7z/7z",
             "/Applications/peazip.app/Contents/MacOS/bin/7z/7z",
             "/opt/homebrew/bin/7z",
@@ -226,6 +232,63 @@ enum ArchiveEngine {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var args = ["x", archive.path, "-o\(dir.path)", "-y", "-bsp1"]
         args.append(contentsOf: paths)
+        return run(z, args, onLine: onLine)
+    }
+
+    // MARK: - Editing an archive in place
+
+    /// Formats 7-Zip can WRITE. Everything else is read-only here:
+    /// RAR is proprietary (7-Zip extracts it but cannot update it), and ISO/DMG-style
+    /// images are not filesystem-editable by 7z either. gz/xz/bz2/zst are single-stream
+    /// containers — "adding a file" would silently replace the whole archive, so they are
+    /// deliberately excluded from in-place editing.
+    static let writableFormats: Set<String> = ["zip", "7z", "tar"]
+
+    static func canModify(_ archive: URL) -> Bool {
+        writableFormats.contains(archive.pathExtension.lowercased())
+    }
+
+    /// Human-readable reason an archive cannot be edited, for the UI to show.
+    static func modifyRefusal(_ archive: URL) -> String? {
+        let e = archive.pathExtension.lowercased()
+        if canModify(archive) { return nil }
+        switch e {
+        case "rar":
+            return "RAR 是专有格式，7-Zip 只能读取、无法写入或删除。要编辑请先转为 ZIP 或 7Z。"
+        case "gz", "xz", "bz2", "zst", "zstd", "lzma":
+            return "\(e.uppercased()) 是单文件压缩流，不支持增删条目。要编辑请先转为 ZIP 或 7Z。"
+        case "iso", "cab":
+            return "\(e.uppercased()) 属镜像/只读格式，7-Zip 无法就地修改。"
+        default:
+            return "该格式不支持就地增删（仅支持 ZIP / 7Z / TAR）。"
+        }
+    }
+
+    /// `7z a <archive> <items…>` — add files into an existing archive.
+    /// 7-Zip infers the container format from the archive's extension.
+    static func addInto(_ archive: URL, items: [URL],
+                        onLine: ((String) -> Void)?) -> Result {
+        guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
+        guard canModify(archive) else {
+            return Result(output: modifyRefusal(archive) ?? "该格式不支持修改", status: 1)
+        }
+        var args = ["a", "-bsp1", archive.path]
+        args.append(contentsOf: items.map(\.path))
+        appLog.notice("7z add-into \(archive.lastPathComponent, privacy: .public): \(items.count, privacy: .public) 项")
+        return run(z, args, onLine: onLine)
+    }
+
+    /// `7z d <archive> <inner paths…>` — delete entries from an archive.
+    static func deleteEntries(_ archive: URL, paths: [String],
+                              onLine: ((String) -> Void)?) -> Result {
+        guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
+        guard canModify(archive) else {
+            return Result(output: modifyRefusal(archive) ?? "该格式不支持修改", status: 1)
+        }
+        guard !paths.isEmpty else { return Result(output: "没有要删除的条目", status: 1) }
+        var args = ["d", "-bsp1", archive.path]
+        args.append(contentsOf: paths)
+        appLog.notice("7z delete \(archive.lastPathComponent, privacy: .public): \(paths.count, privacy: .public) 条")
         return run(z, args, onLine: onLine)
     }
 

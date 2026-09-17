@@ -1,4 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
+
+/// Surfaced to Finder when a drag-out extraction fails, so the drop is rejected instead
+/// of silently producing nothing.
+struct DragFailure: LocalizedError {
+    var errorDescription: String? { "从压缩包中提取失败" }
+}
 
 struct ContentView: View {
     @EnvironmentObject private var model: AppModel
@@ -56,8 +63,20 @@ struct ContentView: View {
         }
         if model.isBrowsingArchive {
             // Archive browsing: file-management actions make no sense here (the paths are
-            // inside the archive), so the toolbar becomes extract-oriented.
+            // inside the archive), so the toolbar becomes extract/edit-oriented.
             ToolbarItemGroup {
+                Button { model.addFilesToOpenArchive() } label: {
+                    Label("添加文件", systemImage: "plus.circle")
+                }
+                .disabled(!model.canModifyOpenArchive)
+                .help(model.modifyHint ?? "把文件或文件夹添加进这个压缩包（也可直接拖进来）")
+
+                Button(role: .destructive) { model.deleteSelectedFromOpenArchive() } label: {
+                    Label("删除", systemImage: "trash")
+                }
+                .disabled(model.selection.isEmpty || !model.canModifyOpenArchive)
+                .help(model.modifyHint ?? "从压缩包中删除选中的内容")
+
                 Button { model.extractFromOpenArchive(selectedOnly: true) } label: {
                     Label("解压选中", systemImage: "tray.and.arrow.up")
                 }.disabled(model.selection.isEmpty).help("把选中的内容解压出来")
@@ -115,6 +134,26 @@ struct ContentView: View {
                         .frame(width: 16)
                     Text(item.name).lineLimit(1)
                 }
+                .contentShape(Rectangle())
+                // Dragging an entry out to Finder extracts just that entry into a scratch
+                // folder and hands Finder the file. Using a file representation means the
+                // extraction can happen while Finder is already asking for the file, so a
+                // large entry does not stall the drag.
+                .onDrag {
+                    guard item.fromArchive else { return NSItemProvider() }
+                    let provider = NSItemProvider()
+                    provider.suggestedName = item.name
+                    provider.registerFileRepresentation(
+                        forTypeIdentifier: UTType.item.identifier,
+                        fileOptions: [], visibility: .all
+                    ) { completion in
+                        model.extractForDrag(item) { url in
+                            completion(url, false, url == nil ? DragFailure() : nil)
+                        }
+                        return nil
+                    }
+                    return provider
+                }
             }
             TableColumn("类型") { Text($0.kind).foregroundStyle(.secondary) }
                 .width(min: 80, ideal: 110)
@@ -124,12 +163,26 @@ struct ContentView: View {
                 .width(min: 110, ideal: 136)
         }
         .environment(\.defaultMinListRowHeight, 26)
+        // Dropping files onto the window adds them into the open archive (the file
+        // manager case is deliberately not handled: silently copying files around a
+        // folder on a stray drop is not something a user asked for).
+        .dropDestination(for: URL.self) { urls, _ in
+            guard model.isBrowsingArchive, !urls.isEmpty else { return false }
+            model.addItemsToOpenArchive(urls)
+            return true
+        }
         .contextMenu(forSelectionType: URL.self) { urls in
             if model.isBrowsingArchive {
                 if !urls.isEmpty {
                     Button("解压选中项…") { model.extractFromOpenArchive(selectedOnly: true) }
+                    Button("从压缩包删除…", role: .destructive) {
+                        model.deleteSelectedFromOpenArchive()
+                    }
+                    .disabled(!model.canModifyOpenArchive)
                     Divider()
                 }
+                Button("添加文件…") { model.addFilesToOpenArchive() }
+                    .disabled(!model.canModifyOpenArchive)
                 Button("全部解压…") { model.extractFromOpenArchive(selectedOnly: false) }
                 Divider()
                 Button("关闭压缩包") { model.exitArchive() }
@@ -246,6 +299,13 @@ struct StatusBar: View {
         HStack(spacing: 10) {
             Text(model.statusText).font(.system(size: 11.5)).foregroundStyle(.secondary)
             Spacer()
+            // Say WHY this archive cannot be edited, rather than showing greyed-out
+            // buttons with no explanation (RAR being the common case).
+            if let hint = model.modifyHint {
+                Label(hint, systemImage: "lock.fill")
+                    .font(.system(size: 11.5)).foregroundStyle(.orange)
+                    .lineLimit(1).truncationMode(.middle)
+            }
             if !ArchiveEngine.isAvailable {
                 Label("未找到 7z 引擎", systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 11.5)).foregroundStyle(.orange)
