@@ -12,7 +12,14 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-APP="build/PeaZip-dev.app"
+# Two bundles, two jobs.
+#   build/PeaZip.app      the production bundle — what install.sh copies to /Applications
+#   build/PeaZip-dev.app  a throwaway copy for this script's own launch checks, with its own
+#                         bundle id and WITHOUT NSServices. Same-identity twins get terminated
+#                         by macOS, and a dev copy that advertises the Finder services shows up
+#                         in the right-click menu as a duplicate of every service.
+APP="build/PeaZip.app"
+DEV="build/PeaZip-dev.app"
 # Two different names on purpose: SwiftPM emits PeaZip27 (the target name), while the
 # executable INSIDE the bundle is PeaZip — that is what Activity Monitor and the Force Quit
 # window show, and "PeaZip27" there was a leftover from when the app was called "PeaZip 27".
@@ -96,8 +103,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key><string>PeaZip</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.16</string>
-    <key>CFBundleVersion</key><string>16</string>
+    <key>CFBundleShortVersionString</key><string>0.17</string>
+    <key>CFBundleVersion</key><string>17</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <!-- Without CFBundleDevelopmentRegion, AppKit falls back to region "en" and renders
@@ -209,6 +216,12 @@ echo "  已清"
 
 echo
 echo "=== 3) 签名 ==="
+# dev copy: own identity, no services registered with the system
+rm -rf "$DEV"; cp -R "$APP" "$DEV"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.yww.pea27.dev" "$DEV/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Delete :NSServices" "$DEV/Contents/Info.plist" 2>/dev/null || true
+codesign --force --deep --sign - "$DEV" >/dev/null 2>&1 || true
+
 codesign --force --deep --sign - "$APP" || { echo "❌ 签名失败"; exit 1; }
 if codesign -v "$APP" 2>/dev/null; then echo "  ✅ 签名校验通过"; else echo "❌ 签名校验未通过"; exit 1; fi
 
@@ -223,7 +236,7 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 sleep 1
-open "$APP"
+open "$DEV"
 PID=""
 for _ in $(seq 1 24); do
   sleep 0.5

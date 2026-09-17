@@ -5,7 +5,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-SRC="$PWD/build/PeaZip-dev.app"
+SRC="$PWD/build/PeaZip.app"
 DEST="/Applications/PeaZip.app"
 ORIG="/Applications/PeaZip.app"
 BACKUP="$HOME/Desktop/PeaZip-原版备份.app"
@@ -61,15 +61,28 @@ ditto "$SRC" "$DEST" || { echo "❌ 复制失败"; exit 1; }
 # to replace the original. CFBundleExecutable is PeaZip, matching the bundle name (the plist
 # key still points at the real file name).
 PB="/usr/libexec/PlistBuddy"
-# The dev build ships as com.yww.pea27.dev so it cannot collide with the installed app
-# while testing. Installing must restore the real identity: TCC permission grants, the
-# default-handler choice and the Finder service registrations are all keyed to it.
-"$PB" -c "Set :CFBundleIdentifier com.yww.pea27" "$DEST/Contents/Info.plist" 2>/dev/null \
-  || "$PB" -c "Add :CFBundleIdentifier string com.yww.pea27" "$DEST/Contents/Info.plist"
+# The production bundle is installed as-is: its bundle id is the real one (TCC grants, the
+# default-handler choice and the Finder services are all keyed to it) and it carries the
+# NSServices the user actually needs.
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.yww.pea27" "$DEST/Contents/Info.plist" 2>/dev/null || true
 "$PB" -c "Set :CFBundleName PeaZip" "$DEST/Contents/Info.plist"
 "$PB" -c "Set :CFBundleDisplayName PeaZip" "$DEST/Contents/Info.plist"
 codesign --force --deep --sign - "$DEST" >/dev/null 2>&1
 codesign -v "$DEST" 2>/dev/null && echo "  已安装并签名: $DEST" || echo "  ⚠️ 签名校验未过"
+
+# ---------------------------------------------------------------------------------------
+# Unregister and remove BOTH build-time bundles. They must not linger: any registered copy
+# of the app — even one with NSServices stripped — makes the system list every PeaZip
+# service twice in the right-click menu, once as "(PeaZip)" and once as "(PeaZip-dev)".
+# The install source is assets/ + these scripts; build/ is regenerated on every run.
+# ---------------------------------------------------------------------------------------
+LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+for b in "$PWD/build/PeaZip.app" "$PWD/build/PeaZip-dev.app"; do
+  [ -e "$b" ] || continue
+  "$LSREG" -u "$b" 2>/dev/null || true
+  rm -rf "$b"
+done
+echo "  已清理构建产物（避免右键菜单里服务重复）"
 echo "  CFBundleName = $("$PB" -c "Print :CFBundleName" "$DEST/Contents/Info.plist")"
 
 echo
