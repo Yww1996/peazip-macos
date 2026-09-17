@@ -157,33 +157,16 @@ struct ContentView: View {
         Table(displayed, selection: $model.selection, sortOrder: $sortOrder) {
             TableColumn("名称", value: \.name) { item in
                 HStack(spacing: 7) {
+                    // The drag source is the ICON only. Putting .onDrag on the whole cell
+                    // made the cell a drag target, and the double-click (primaryAction)
+                    // stopped firing — you could not enter a folder inside an archive.
                     Image(systemName: item.symbol)
                         .foregroundStyle(item.tint)
                         .frame(width: 16)
+                        .contentShape(Rectangle())
+                        .onDrag { dragProvider(for: item) }
+                        .help(item.fromArchive ? "拖到访达即可导出这个文件" : "拖到访达即可拷贝")
                     Text(item.name).lineLimit(1)
-                }
-                .contentShape(Rectangle())
-                // Dragging out: an entry inside an archive is extracted into a scratch
-                // folder and handed to Finder; a real file is handed over as-is. Using a
-                // file representation means the extraction can happen while Finder is
-                // already asking for the file, so a large entry does not stall the drag.
-                .onDrag {
-                    if item.fromArchive {
-                        let provider = NSItemProvider()
-                        provider.suggestedName = item.name
-                        provider.registerFileRepresentation(
-                            forTypeIdentifier: UTType.item.identifier,
-                            fileOptions: [], visibility: .all
-                        ) { completion in
-                            model.extractForDrag(item) { url in
-                                completion(url, false, url == nil ? DragFailure() : nil)
-                            }
-                            return nil
-                        }
-                        return provider
-                    }
-                    // Filesystem rows drag as themselves (Finder copies them out).
-                    return NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
                 }
             }
             TableColumn("类型", value: \.kind) { Text($0.kind).foregroundStyle(.secondary) }
@@ -205,6 +188,12 @@ struct ContentView: View {
         .contextMenu(forSelectionType: URL.self) { urls in
             if model.isBrowsingArchive {
                 if !urls.isEmpty {
+                    // A guaranteed way in, independent of double-click semantics.
+                    Button("打开 / 进入") {
+                        guard let u = urls.first,
+                              let item = model.items.first(where: { $0.url == u }) else { return }
+                        model.open(item)
+                    }
                     Button("解压选中项…") { model.extractFromOpenArchive(selectedOnly: true) }
                     Button("从压缩包删除…", role: .destructive) {
                         model.deleteSelectedFromOpenArchive()
@@ -236,6 +225,27 @@ struct ContentView: View {
             guard let u = urls.first, let item = model.items.first(where: { $0.url == u }) else { return }
             model.open(item)
         }
+    }
+
+    /// Drag payload for a row: an archive entry is extracted on demand — Finder asks for
+    /// the file while the drag is in progress, so a large entry does not stall the drag —
+    /// while a real file is handed over as-is.
+    private func dragProvider(for item: FileItem) -> NSItemProvider {
+        guard item.fromArchive else {
+            return NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
+        }
+        let provider = NSItemProvider()
+        provider.suggestedName = item.name
+        provider.registerFileRepresentation(
+            forTypeIdentifier: UTType.item.identifier,
+            fileOptions: [], visibility: .all
+        ) { completion in
+            model.extractForDrag(item) { url in
+                completion(url, false, url == nil ? DragFailure() : nil)
+            }
+            return nil
+        }
+        return provider
     }
 }
 

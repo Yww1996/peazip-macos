@@ -192,10 +192,17 @@ struct PeaZip27App: App {
         }
 
         let root = AppModel.children(of: entries, archive: url, under: "")
-        dump(root, "根目录")
-
-        if let d = root.first(where: { $0.isDirectory }), let inner = d.entryPath {
-            dump(AppModel.children(of: entries, archive: url, under: inner), "进入「\(d.name)」")
+        var level = ""
+        var depth = 0
+        while depth < 4 {
+            let items = depth == 0 ? root : AppModel.children(of: entries, archive: url, under: level)
+            dump(items, depth == 0 ? "根目录" : "第 \(depth) 层「\(level)」")
+            guard let d = items.first(where: { $0.isDirectory }), let inner = d.entryPath else {
+                print("  （本层没有子文件夹，下钻结束）")
+                break
+            }
+            level = inner
+            depth += 1
         }
         // A synthetic URL must never look like a real archive to the actions.
         let bogus = root.contains { $0.fromArchive && $0.isArchive }
@@ -293,6 +300,12 @@ struct PeaZip27App: App {
                     .keyboardShortcut("n", modifiers: [.command])
             }
             CommandMenu("归档") {
+                // ⌘O works in both modes, so entering a folder never depends on the
+                // double-click surviving SwiftUI's cell interaction handling.
+                Button("打开") { model.openSelection() }
+                    .keyboardShortcut("o", modifiers: [.command])
+                    .disabled(model.selection.isEmpty)
+                Divider()
                 // The menu has to follow the mode: while browsing inside an archive, the
                 // filesystem commands would operate on synthetic paths that do not exist.
                 if model.isBrowsingArchive {

@@ -224,6 +224,9 @@ final class AppModel: ObservableObject {
     }
 
     func goToArchivePath(_ path: String) {
+        // Logged: without this there is no way to tell "the double-click never fired" from
+        // "it fired but listed the same level again".
+        appLog.notice("archive enter path \(path.isEmpty ? "(根目录)" : path, privacy: .public)")
         archivePath = path
         selection.removeAll()
         loadArchiveEntries()
@@ -235,6 +238,9 @@ final class AppModel: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let entries = ArchiveEngine.entries(in: archive)
             let items = AppModel.children(of: entries, archive: archive, under: inner)
+            // The level is part of the log line: "which folder did it actually list" is the
+            // only way to diagnose a descent that appears not to happen.
+            appLog.notice("archive level \(inner.isEmpty ? "(根目录)" : inner, privacy: .public) → \(items.count, privacy: .public) 项 / 共 \(entries.count, privacy: .public) 条")
             DispatchQueue.main.async {
                 // Ignore a result that arrived after the user navigated elsewhere.
                 guard let self, self.openArchive == archive, self.archivePath == inner else { return }
@@ -868,6 +874,14 @@ final class AppModel: ObservableObject {
             }
             return last
         }
+    }
+
+    /// ⌘O / 菜单「打开」: act on the current selection in whichever mode we are in.
+    /// Exists so that entering a folder never depends on double-click semantics.
+    func openSelection() {
+        guard let u = selection.first,
+              let item = items.first(where: { $0.url == u }) else { return }
+        open(item)
     }
 
     /// Double-click behaviour.
