@@ -209,6 +209,11 @@ struct PeaZip27App: App {
         if CommandLine.arguments.contains("--engine-check") { EngineUpdater.headless(forceInstall: false) }
         if CommandLine.arguments.contains("--engine-update") { EngineUpdater.headless(forceInstall: true) }
         // Archive browsing, verifiable without clicking: --list <archive>
+        // Extraction destination, verifiable without clicking: --extract-test <archive>
+        if let i = CommandLine.arguments.firstIndex(of: "--extract-test"),
+           i + 1 < CommandLine.arguments.count {
+            Self.extractTest(CommandLine.arguments[i + 1])
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--list"),
            i + 1 < CommandLine.arguments.count {
             Self.listArchive(CommandLine.arguments[i + 1])
@@ -293,6 +298,31 @@ struct PeaZip27App: App {
         let bogus = root.contains { $0.fromArchive && $0.isArchive }
         print("  内部条目误判为压缩包: \(bogus ? "❌ 有" : "✅ 无")")
         exit(0)
+    }
+
+    /// Does the protected-folder fallback actually kick in? Runs the same decision the UI
+    /// makes and extracts for real, so "解压不了" is reproducible without clicking.
+    static func extractTest(_ path: String) -> Never {
+        let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardizedFileURL
+        print("PeaZip 解压目标自检")
+        print("  压缩包    : \(url.lastPathComponent)")
+        print("  所在目录  : \(url.deletingLastPathComponent().path)")
+        let (root, note) = AppModel.writableRoot(for: url)
+        if let note {
+            print("  可写判断  : 原位置不可写 → 改道 \(root.path)")
+            print("  说明      : \(note)")
+        } else {
+            print("  可写判断  : 原位置可写，就地解压")
+        }
+        let dest = root.appendingPathComponent(
+            url.deletingPathExtension().lastPathComponent + "-解压自检")
+        try? FileManager.default.removeItem(at: dest)
+        let r = ArchiveEngine.extract(url, to: dest, onLine: nil)
+        let n = (try? FileManager.default.contentsOfDirectory(atPath: dest.path).count) ?? 0
+        print("  解压结果  : \(r.ok ? "✅ 成功" : "❌ 失败") status=\(r.status)")
+        print("  落在      : \(dest.path)（\(n) 项）")
+        try? FileManager.default.removeItem(at: dest)
+        exit(r.ok ? 0 : 1)
     }
 
     static func selftest() -> Never {

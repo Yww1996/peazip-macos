@@ -336,6 +336,24 @@ final class AppModel: ObservableObject {
         addItemsToOpenArchive(urls)
     }
 
+    /// A folder we are actually allowed to write to.
+    ///
+    /// macOS refuses writes inside another app's container — WeChat and QQ keep received
+    /// files in theirs — and Finder only authorises *reading* the file the user opened, not
+    /// writing next to it. Extracting there fails with a bare status=2, which is the
+    /// "解压不了" case: the archive opens and lists fine, only the write is denied.
+    static func writableRoot(for file: URL) -> (url: URL, note: String?) {
+        let parent = file.deletingLastPathComponent()
+        if FileManager.default.isWritableFile(atPath: parent.path) {
+            return (parent, nil)
+        }
+        let downloads = FileManager.default
+            .urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
+        return (downloads,
+                "原位置受系统保护、不可写入（微信 / QQ 等应用文件夹就是这种），已改到 ~/Downloads")
+    }
+
     /// Extract the whole archive, or just the selected entries, next to the archive.
     func extractFromOpenArchive(selectedOnly: Bool) {
         guard let archive = openArchive else { return }
@@ -346,10 +364,12 @@ final class AppModel: ObservableObject {
             opSheet = OpSheet(title: "解压", detail: "请先选中要解压的内容")
             return
         }
-        let dest = archive.deletingLastPathComponent()
+        let (root, note) = Self.writableRoot(for: archive)
+        let dest = root
             .appendingPathComponent(archive.deletingPathExtension().lastPathComponent +
                                     (selectedOnly ? "-选中项" : ""))
         run(title: "解压 \(selectedOnly ? "\(paths.count) 项" : archive.lastPathComponent)",
+            note: note,
             reveal: Prefs.openAfterExtract ? dest : nil) { line in
             ArchiveEngine.extractEntries(archive, paths: paths, to: dest, onLine: line)
         }
@@ -463,13 +483,13 @@ final class AppModel: ObservableObject {
         let items = Self.existing(urls)
         guard let first = items.first else { return }
         openFromFinder(items)               // show what is being worked on
-        let dir = first.deletingLastPathComponent()
+        let (dir, note) = Self.writableRoot(for: first)
         let base = items.count == 1
             ? first.deletingPathExtension().lastPathComponent
             : dir.lastPathComponent
         let name = (base.isEmpty ? "archive" : base) + "." + format.ext
         let target = dir.appendingPathComponent(name)
-        run(title: "压缩 \(items.count) 个项目 → \(name)") { line in
+        run(title: "压缩 \(items.count) 个项目 → \(name)", note: note) { line in
             ArchiveEngine.add(sources: items, to: target, format: format,
                               level: Prefs.compressionLevel,
                               exclusions: Prefs.exclusionPatterns,
@@ -488,13 +508,15 @@ final class AppModel: ObservableObject {
             return
         }
         openFromFinder(archives)
-        let firstDest = archives[0].deletingLastPathComponent()
+        let (firstRoot, note) = Self.writableRoot(for: archives[0])
+        let firstDest = firstRoot
             .appendingPathComponent(archives[0].deletingPathExtension().lastPathComponent)
         run(title: "解压 \(archives.count) 个压缩包",
+            note: note,
             reveal: Prefs.openAfterExtract ? firstDest : nil) { line in
             var last = ArchiveEngine.Result(output: "", status: 0)
             for a in archives {
-                let dest = a.deletingLastPathComponent()
+                let dest = Self.writableRoot(for: a).url
                     .appendingPathComponent(a.deletingPathExtension().lastPathComponent)
                 last = ArchiveEngine.extract(a, to: dest, onLine: line)
                 if !last.ok { break }
@@ -755,10 +777,11 @@ final class AppModel: ObservableObject {
     /// popping up every time you peek at a file is worse than no feedback. A failure
     /// still surfaces itself, so nothing is swallowed.
     private func run(title: String,
+                     note: String? = nil,
                      reveal: URL? = nil,
                      quiet: Bool = false,
                      _ work: @escaping (@escaping (String) -> Void) -> ArchiveEngine.Result) {
-        logLines = ["▸ \(title)"]
+        logLines = note.map { ["▸ \(title)", "⚠️ \($0)"] } ?? ["▸ \(title)"]
         if !quiet { opSheet = OpSheet(title: title) }
         busy = true
         let append: (String) -> Void = { [weak self] line in
@@ -838,15 +861,14 @@ final class AppModel: ObservableObject {
             opSheet = OpSheet(title: "解压", detail: "请先选中一个压缩包")
             return
         }
-        let dest: URL
-        if toNewFolder {
-            dest = currentURL.appendingPathComponent(arc.url.deletingPathExtension().lastPathComponent)
-        } else {
-            dest = currentURL
-        }
-        run(title: "解压 \(arc.name) → \(dest.lastPathComponent)",
-            reveal: Prefs.openAfterExtract ? dest : nil) { line in
-            ArchiveEngine.extract(arc.url, to: dest, onLine: line)
+        let (safeRoot, note) = Self.writableRoot(for: arc.url)
+        let safeDest = toNewFolder
+            ? safeRoot.appendingPathComponent(arc.url.deletingPathExtension().lastPathComponent)
+            : safeRoot
+        run(title: "解压 \(arc.name) → \(safeDest.lastPathComponent)",
+            note: note,
+            reveal: Prefs.openAfterExtract ? safeDest : nil) { line in
+            ArchiveEngine.extract(arc.url, to: safeDest, onLine: line)
         }
     }
 
