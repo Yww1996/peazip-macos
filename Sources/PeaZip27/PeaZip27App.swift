@@ -58,6 +58,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
+        // Watch for anything closing our windows: with "quit when the last window closes"
+        // in place, an unexpected close silently kills the app seconds after launch.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification, object: nil, queue: .main
+        ) { note in
+            guard let w = note.object as? NSWindow else { return }
+            let t = w.title.isEmpty ? "(无题)" : w.title
+            appLog.notice("窗口即将关闭: \(t, privacy: .public) \(Int(w.frame.width))x\(Int(w.frame.height), privacy: .public)")
+        }
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+        ) { note in
+            guard let w = note.object as? NSWindow else { return }
+            appLog.notice("窗口成为 key: \(w.title.isEmpty ? "(无题)" : w.title, privacy: .public)")
+        }
+        // AppKit kills an idle app outright ("Attempting sudden termination" →
+        // NSTerminateNow), which made the window disappear seconds after launch: the
+        // process was gone by ~10s. A file browser has no unsaved document to save, so
+        // AppKit considers it terminable at any idle moment.
+        ProcessInfo.processInfo.disableSuddenTermination()
+        ProcessInfo.processInfo.disableAutomaticTermination("保持主窗口可见")
         // Finder right-click → 服务 submenu. The selector names must match the
         // NSMessage values declared in Info.plist's NSServices array.
         NSApp.servicesProvider = self

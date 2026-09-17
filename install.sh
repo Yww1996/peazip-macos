@@ -16,8 +16,14 @@ bash package.sh 2>&1 | grep -E "二进制一致|图标|引擎|签名校验|主�
 
 echo
 echo "############ 2) 备份原版（不删除、不覆盖已有备份）############"
-osascript -e 'tell application "PeaZip" to quit' >/dev/null 2>&1 || true
-osascript -e 'tell application "PeaZip 27" to quit' >/dev/null 2>&1 || true
+# pkill, not osascript quit: an Apple Event aimed at a stopped app STARTS it and then
+# quits it, so the queued quit lands on the instance launched moments later and the app
+# appears to die on startup.
+pkill -f "Contents/MacOS/PeaZip27" 2>/dev/null || true
+for _ in $(seq 1 20); do
+    pgrep -f "Contents/MacOS/PeaZip27" >/dev/null || break
+    sleep 0.5
+done
 # Match on the executable path, NOT on the .app folder name: the installed copy is
 # PeaZip.app while the dev build is PeaZip27.app, and a pattern tied to either one
 # silently matches nothing after the rename.
