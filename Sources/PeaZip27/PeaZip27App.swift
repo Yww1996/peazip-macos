@@ -265,7 +265,16 @@ struct PeaZip27App: App {
         let url = URL(fileURLWithPath: path)
         print("PeaZip 压缩包浏览自检")
         print("  归档      : \(url.lastPathComponent)")
-        print("  存在      : \(FileManager.default.fileExists(atPath: url.path) ? "✅" : "❌")")
+        let exists = FileManager.default.fileExists(atPath: url.path)
+        print("  存在      : \(exists ? "✅" : "❌")")
+        // A path inside another app's container reports as missing even when it is right
+        // there: the system denies the stat itself. Say so, instead of "file not found".
+        guard exists else {
+            print("  ❌ 无法访问：文件不存在，或所在位置没有访问权限")
+            print("     若它位于微信 / QQ 等应用的文件夹，需要给 PeaZip 完全磁盘访问权限：")
+            print("     系统设置 → 隐私与安全性 → 完全磁盘访问权限")
+            exit(3)
+        }
         let entries = ArchiveEngine.entries(in: url)
         print("  解析条目  : \(entries.count)")
         guard !entries.isEmpty else { print("❌ 没有解析出任何条目"); exit(1) }
@@ -282,6 +291,17 @@ struct PeaZip27App: App {
         }
 
         let root = AppModel.children(of: entries, archive: url, under: "")
+
+        // Protected location (another app's container): 7-Zip reports nothing rather than an
+        // error, so an empty listing for a file with bytes in it means the system blocked us.
+        let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let bytes = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+        if entries.isEmpty && bytes > 4096 {
+            print("  ⚠️ 读不到内容：文件有 \(bytes) 字节，但引擎返回 0 条 —— 位置受系统保护")
+            print("     需要给 PeaZip 完全磁盘访问权限：系统设置 → 隐私与安全性 → 完全磁盘访问权限")
+            exit(3)
+        }
+
         var level = ""
         var depth = 0
         while depth < 4 {
@@ -407,6 +427,11 @@ struct PeaZip27App: App {
         // `applicationShouldTerminateAfterLastWindowClosed` that becomes an instant quit.
         .defaultLaunchBehavior(.presented)
         .commands {
+            // macOS stores the Full Disk Access list in a SIP-protected database: an app
+            // cannot add itself to it, it can only take the user straight to the pane.
+            CommandGroup(replacing: .help) {
+                Button("授予完全磁盘访问权限…") { AppModel.openFullDiskAccessSettings() }
+            }
             // Replacing the default New-item group wipes out the standard "New Window"
             // entry, so provide our own — otherwise closing the window leaves no way to
             // bring it back from the menu.

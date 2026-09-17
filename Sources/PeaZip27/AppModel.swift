@@ -238,12 +238,25 @@ final class AppModel: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let entries = ArchiveEngine.entries(in: archive)
             let items = AppModel.children(of: entries, archive: archive, under: inner)
+            // A protected file (inside another app's container — WeChat, QQ) is not an error
+            // as far as 7-Zip is concerned: it just reports nothing. An empty listing for a
+            // file that clearly has bytes in it means the system blocked the read, and a
+            // blank list would look like a broken app.
+            let attrs = try? FileManager.default.attributesOfItem(atPath: archive.path)
+            let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
+            let blocked = entries.isEmpty && size > 4096
             // The level is part of the log line: "which folder did it actually list" is the
             // only way to diagnose a descent that appears not to happen.
-            appLog.notice("archive level \(inner.isEmpty ? "(根目录)" : inner, privacy: .public) → \(items.count, privacy: .public) 项 / 共 \(entries.count, privacy: .public) 条")
+            appLog.notice("archive level \(inner.isEmpty ? "(根目录)" : inner, privacy: .public) → \(items.count, privacy: .public) 项 / 共 \(entries.count, privacy: .public) 条\(blocked ? " · 疑被系统拦截" : "", privacy: .public)")
             DispatchQueue.main.async {
                 // Ignore a result that arrived after the user navigated elsewhere.
                 guard let self, self.openArchive == archive, self.archivePath == inner else { return }
+                if blocked {
+                    self.opSheet = OpSheet(
+                        title: "读不到压缩包内容",
+                        detail: "\(archive.lastPathComponent) 位于受系统保护的位置（微信 / QQ 等应用的文件夹），PeaZip 没有读取权限。\n\n打开「系统设置 → 隐私与安全性 → 完全磁盘访问权限」，点 + 添加 PeaZip 并打开开关，之后重新打开这个压缩包。")
+                    appLog.notice("读取被系统拦截，已提示用户授权完全磁盘访问")
+                }
                 self.items = items
             }
         }
@@ -334,6 +347,26 @@ final class AppModel: ObservableObject {
     /// so the user sees what is being added. Not used for the drag-out path.
     func importDropped(_ urls: [URL]) {
         addItemsToOpenArchive(urls)
+    }
+
+    /// Take the user to the Full Disk Access pane.
+    ///
+    /// An app cannot grant itself this permission: the list lives in macOS's SIP-protected
+    /// TCC database (tccutil only resets entries, never adds them). Opening the pane is the
+    /// entire extent of what software is allowed to do here; the switch and the
+    /// authentication are the user's.
+    static func openFullDiskAccessSettings() {
+        let candidates = [
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles",
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles",
+        ]
+        for s in candidates {
+            if let u = URL(string: s), NSWorkspace.shared.open(u) {
+                appLog.notice("已打开完全磁盘访问设置面板")
+                return
+            }
+        }
+        appLog.notice("打开完全磁盘访问设置面板失败")
     }
 
     /// A folder we are actually allowed to write to.
