@@ -142,6 +142,10 @@ final class AppModel: ObservableObject {
     /// the modal log panel is reserved for failures.
     @Published var currentOp: String?
     @Published var lastResult: String?
+    /// Live progress of the running operation, 0…1. 7-Zip reports percentages far faster
+    /// than a view should redraw, so only an integer change is published.
+    @Published var progress: Double?
+    @Published var progressDetail: String?
 
     // The sheet drives the "add" form
     @Published var addFormat: ArchiveEngine.Format = .zip
@@ -326,8 +330,8 @@ final class AppModel: ObservableObject {
             .appendingPathComponent("peazip27-preview-\(UUID().uuidString)")
         previewDir = tmp
         // quiet: peeking at a file should not throw a modal sheet over the window
-        run(title: "打开 \(item.name)", quiet: true) { line in
-            let r = ArchiveEngine.extractEntries(archive, paths: [inner], to: tmp, onLine: line)
+        run(title: "打开 \(item.name)", quiet: true) { line, progress in
+            let r = ArchiveEngine.extractEntries(archive, paths: [inner], to: tmp, onLine: line, onProgress: progress)
             if r.ok {
                 let f = tmp.appendingPathComponent(inner)
                 DispatchQueue.main.async {
@@ -359,6 +363,19 @@ final class AppModel: ObservableObject {
     /// TCC database (tccutil only resets entries, never adds them). Opening the pane is the
     /// entire extent of what software is allowed to do here; the switch and the
     /// authentication are the user's.
+    /// Marshal 7-Zip's percentage onto the main thread. Publishing on every callback floods
+    /// the view; an integer change is enough for a progress bar.
+    func reportProgress(_ percent: Int, _ detail: String?) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let value = Double(percent) / 100.0
+            if self.progress == nil || Int((self.progress ?? 0) * 100) != percent {
+                self.progress = value
+            }
+            if detail != self.progressDetail { self.progressDetail = detail }
+        }
+    }
+
     /// Re-open the log panel on demand, for when the summary in the status bar is not
     /// enough and the operation is long gone.
     func showLastLog() {
@@ -413,8 +430,8 @@ final class AppModel: ObservableObject {
                                     (selectedOnly ? "-选中项" : ""))
         run(title: "解压 \(selectedOnly ? "\(paths.count) 项" : archive.lastPathComponent)",
             note: note,
-            reveal: Prefs.openAfterExtract ? dest : nil) { line in
-            ArchiveEngine.extractEntries(archive, paths: paths, to: dest, onLine: line)
+            reveal: Prefs.openAfterExtract ? dest : nil) { line, progress in
+            ArchiveEngine.extractEntries(archive, paths: paths, to: dest, onLine: line, onProgress: progress)
         }
     }
 
@@ -438,8 +455,8 @@ final class AppModel: ObservableObject {
         guard let refusal = ArchiveEngine.modifyRefusal(archive) else {
             let items = Self.existing(urls)
             guard !items.isEmpty else { return }
-            run(title: "添加 \(items.count) 项 → \(archive.lastPathComponent)") { line in
-                ArchiveEngine.addInto(archive, items: items, onLine: line)
+            run(title: "添加 \(items.count) 项 → \(archive.lastPathComponent)") { line, progress in
+                ArchiveEngine.addInto(archive, items: items, onLine: line, onProgress: progress)
             }
             return
         }
@@ -483,8 +500,8 @@ final class AppModel: ObservableObject {
         alert.addButton(withTitle: "删除")
         alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
-        run(title: "从压缩包删除 \(paths.count) 项") { line in
-            ArchiveEngine.deleteEntries(archive, paths: paths, onLine: line)
+        run(title: "从压缩包删除 \(paths.count) 项") { line, progress in
+            ArchiveEngine.deleteEntries(archive, paths: paths, onLine: line, onProgress: progress)
         }
     }
 
@@ -501,7 +518,7 @@ final class AppModel: ObservableObject {
             .appendingPathComponent("peazip27-drag-\(UUID().uuidString)")
         dragDir = tmp
         DispatchQueue.global(qos: .userInitiated).async {
-            let r = ArchiveEngine.extractEntries(archive, paths: [inner], to: tmp, onLine: nil)
+            let r = ArchiveEngine.extractEntries(archive, paths: [inner], to: tmp, onLine: nil, onProgress: nil)
             let url = tmp.appendingPathComponent(inner)
             DispatchQueue.main.async {
                 completion(r.ok && FileManager.default.fileExists(atPath: url.path) ? url : nil)
@@ -532,11 +549,11 @@ final class AppModel: ObservableObject {
             : dir.lastPathComponent
         let name = (base.isEmpty ? "archive" : base) + "." + format.ext
         let target = dir.appendingPathComponent(name)
-        run(title: "压缩 \(items.count) 个项目 → \(name)", note: note) { line in
+        run(title: "压缩 \(items.count) 个项目 → \(name)", note: note) { line, progress in
             ArchiveEngine.add(sources: items, to: target, format: format,
                               level: Prefs.compressionLevel,
                               exclusions: Prefs.exclusionPatterns,
-                              onLine: line)
+                              onLine: line, onProgress: progress)
         }
     }
 
@@ -556,12 +573,12 @@ final class AppModel: ObservableObject {
             .appendingPathComponent(archives[0].deletingPathExtension().lastPathComponent)
         run(title: "解压 \(archives.count) 个压缩包",
             note: note,
-            reveal: Prefs.openAfterExtract ? firstDest : nil) { line in
+            reveal: Prefs.openAfterExtract ? firstDest : nil) { line, progress in
             var last = ArchiveEngine.Result(output: "", status: 0)
             for a in archives {
                 let dest = Self.writableRoot(for: a).url
                     .appendingPathComponent(a.deletingPathExtension().lastPathComponent)
-                last = ArchiveEngine.extract(a, to: dest, onLine: line)
+                last = ArchiveEngine.extract(a, to: dest, onLine: line, onProgress: progress)
                 if !last.ok { break }
             }
             return last
@@ -577,11 +594,11 @@ final class AppModel: ObservableObject {
             return
         }
         openFromFinder(archives)
-        run(title: "测试完整性（\(archives.count) 个）") { line in
+        run(title: "测试完整性（\(archives.count) 个）") { line, progress in
             var last = ArchiveEngine.Result(output: "", status: 0)
             for a in archives {
                 line("▸ \(a.lastPathComponent)")
-                last = ArchiveEngine.test(a, onLine: line)
+                last = ArchiveEngine.test(a, onLine: line, onProgress: progress)
                 if !last.ok { break }
             }
             return last
@@ -830,7 +847,8 @@ final class AppModel: ObservableObject {
                      note: String? = nil,
                      reveal: URL? = nil,
                      quiet: Bool = false,
-                     _ work: @escaping (@escaping (String) -> Void) -> ArchiveEngine.Result) {
+                     _ work: @escaping (@escaping (String) -> Void,
+                                        @escaping (Int, String?) -> Void) -> ArchiveEngine.Result) {
         logLines = note.map { ["▸ \(title)", "⚠️ \($0)"] } ?? ["▸ \(title)"]
         // Success does NOT raise a panel. A modal carrying 7-Zip's copyright banner after
         // every compress/extract is pure noise — it is what made the app feel like a script
@@ -839,11 +857,16 @@ final class AppModel: ObservableObject {
         busy = true
         currentOp = quiet ? nil : title
         lastResult = nil
+        progress = nil
+        progressDetail = nil
         let append: (String) -> Void = { [weak self] line in
             DispatchQueue.main.async { self?.logLines.append(line) }
         }
+        let report: (Int, String?) -> Void = { [weak self] pct, detail in
+            self?.reportProgress(pct, detail)
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let r = work(append)
+            let r = work(append, report)
             DispatchQueue.main.async {
                 guard let self else { return }
                 appLog.notice("op \(title, privacy: .public) → \(r.ok ? "ok" : "FAILED", privacy: .public) status=\(r.status, privacy: .public)")
@@ -852,6 +875,8 @@ final class AppModel: ObservableObject {
                 if r.ok, let reveal { NSWorkspace.shared.activateFileViewerSelecting([reveal]) }
                 self.busy = false
                 self.currentOp = nil
+                self.progress = nil
+                self.progressDetail = nil
                 if r.ok {
                     if !quiet { self.lastResult = "✅ \(title)" }
                     appLog.notice("面板: 成功不弹（\(title, privacy: .public)）")
@@ -891,16 +916,16 @@ final class AppModel: ObservableObject {
         let fmt = convertFormat
         let target = currentURL
             .appendingPathComponent(arc.url.deletingPathExtension().lastPathComponent + "." + fmt.ext)
-        run(title: "转换 \(arc.name) → \(target.lastPathComponent)") { line in
+        run(title: "转换 \(arc.name) → \(target.lastPathComponent)") { line, progress in
             let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
                 .appendingPathComponent("peazip27-convert-\(UUID().uuidString)")
             defer { try? FileManager.default.removeItem(at: tmp) }
-            let extracted = ArchiveEngine.extract(arc.url, to: tmp, onLine: line)
+            let extracted = ArchiveEngine.extract(arc.url, to: tmp, onLine: line, onProgress: progress)
             guard extracted.ok else { return extracted }
             return ArchiveEngine.add(sources: [tmp], to: target, format: fmt,
                                      level: Prefs.compressionLevel,
                                      exclusions: Prefs.exclusionPatterns,
-                                     onLine: line)
+                                     onLine: line, onProgress: progress)
         }
     }
 
@@ -911,11 +936,11 @@ final class AppModel: ObservableObject {
         if !fileName.lowercased().hasSuffix("." + format.ext) { fileName += "." + format.ext }
         let dir = destination ?? currentURL
         let archive = dir.appendingPathComponent(fileName)
-        run(title: "添加 \(sources.count) 个项目 → \(archive.lastPathComponent)") { line in
+        run(title: "添加 \(sources.count) 个项目 → \(archive.lastPathComponent)") { line, progress in
             ArchiveEngine.add(sources: sources, to: archive, format: format,
                               level: Prefs.compressionLevel,
                               exclusions: Prefs.exclusionPatterns,
-                              onLine: line)
+                              onLine: line, onProgress: progress)
         }
     }
 
@@ -930,8 +955,8 @@ final class AppModel: ObservableObject {
             : safeRoot
         run(title: "解压 \(arc.name) → \(safeDest.lastPathComponent)",
             note: note,
-            reveal: Prefs.openAfterExtract ? safeDest : nil) { line in
-            ArchiveEngine.extract(arc.url, to: safeDest, onLine: line)
+            reveal: Prefs.openAfterExtract ? safeDest : nil) { line, progress in
+            ArchiveEngine.extract(arc.url, to: safeDest, onLine: line, onProgress: progress)
         }
     }
 
@@ -940,8 +965,8 @@ final class AppModel: ObservableObject {
             opSheet = OpSheet(title: "测试", detail: "请先选中一个压缩包")
             return
         }
-        run(title: "测试完整性 \(arc.name)") { line in
-            ArchiveEngine.test(arc.url, onLine: line)
+        run(title: "测试完整性 \(arc.name)") { line, progress in
+            ArchiveEngine.test(arc.url, onLine: line, onProgress: progress)
         }
     }
 
@@ -951,10 +976,10 @@ final class AppModel: ObservableObject {
             opSheet = OpSheet(title: "安全删除", detail: "请先选中要删除的项目")
             return
         }
-        run(title: "安全删除 \(targets.count) 个项目（\(Prefs.securePasses) 遍覆写）") { line in
+        run(title: "安全删除 \(targets.count) 个项目（\(Prefs.securePasses) 遍覆写）") { line, progress in
             var last = ArchiveEngine.Result(output: "", status: 0)
             for t in targets {
-                last = ArchiveEngine.secureDelete(t, passes: Prefs.securePasses, onLine: line)
+                last = ArchiveEngine.secureDelete(t, passes: Prefs.securePasses, onLine: line, onProgress: progress)
                 if !last.ok { break }
             }
             return last

@@ -62,9 +62,14 @@ enum ArchiveEngine {
     struct Result { var output: String; var status: Int32; var ok: Bool { status == 0 } }
 
     /// Runs a tool, streaming stdout+stderr line by line so the UI can show progress.
+    ///
+    /// `onProgress` reports 7-Zip's own percentage. Those updates are separated by a
+    /// CARRIAGE RETURN, not a newline, so a newline-only splitter swallows every one of them
+    /// and progress appears to never arrive — the percent is parsed from the \r fragments.
     @discardableResult
     static func run(_ tool: URL, _ arguments: [String],
-                    onLine: ((String) -> Void)? = nil) -> Result {
+                    onLine: ((String) -> Void)? = nil,
+                    onProgress: ((Int, String?) -> Void)? = nil) -> Result {
         let p = Process()
         p.executableURL = tool
         p.arguments = arguments
@@ -83,8 +88,12 @@ enum ArchiveEngine {
             let d = fh.availableData
             guard !d.isEmpty, let s = String(data: d, encoding: .utf8) else { return }
             lock.lock(); collected += s; lock.unlock()
-            for raw in s.split(separator: "\n", omittingEmptySubsequences: true) {
-                onLine?(String(raw))
+            if let (pct, detail) = progressInChunk(s) { onProgress?(pct, detail) }
+            for fragment in s.split(omittingEmptySubsequences: true,
+                                    whereSeparator: { $0 == "\n" || $0 == "\r" }) {
+                let text = String(fragment)
+                // Progress fragments stay out of the log the sheet shows on failure.
+                if parseProgress(text) == nil { onLine?(text) }
             }
         }
 
@@ -101,6 +110,88 @@ enum ArchiveEngine {
         }
         lock.lock(); let out = collected; lock.unlock()
         return Result(output: out, status: p.terminationStatus)
+    }
+
+    /// Byte-weighted progress, derived from 7-Zip's per-file lines.
+    ///
+    /// 7-Zip suppresses its own percentage when stdout is a pipe rather than a terminal — a
+    /// 400 MB extraction still reported a bare "0%", so -bsp1 is useless here. With -bb1 it
+    /// does name every file as it goes, and the uncompressed sizes are already parsed out of
+    /// the archive, so the percentage is computed locally.
+    ///
+    /// Known limit: an archive holding ONE huge file therefore moves in one step, since
+    /// there is no per-file feedback inside it. Everything else scales by real bytes.
+    private static func progressTracker(entries: [Entry], selecting: [String]?,
+                                        onProgress: ((Int, String?) -> Void)?) -> (String) -> Void {
+        let files: [Entry]
+        if let sels = selecting {
+            files = entries.filter { e in
+                !e.isDirectory && sels.contains { e.path == $0 || e.path.hasPrefix($0 + "/") }
+            }
+        } else {
+            files = entries.filter { !$0.isDirectory }
+        }
+        var sizes: [String: Int64] = [:]
+        for e in files { sizes[e.path] = e.size }
+        let total = sizes.values.reduce(Int64(0), +)
+        var done: Int64 = 0
+        var lastPct = -1
+        return { line in
+            guard total > 0, let name = processedName(line), let sz = sizes[name] else { return }
+            done += sz
+            let pct = min(99, Int((Double(done) / Double(total) * 100).rounded()))
+            guard pct != lastPct else { return }
+            lastPct = pct
+            onProgress?(pct, name)
+        }
+    }
+
+    /// "- path/to/name" — the line 7-Zip prints per file under -bb1.
+    static func processedName(_ line: String) -> String? {
+        let t = line.trimmingCharacters(in: .whitespaces)
+        guard t.hasPrefix("- ") || t.hasPrefix("+ ") else { return nil }
+        let name = String(t.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? nil : name
+    }
+
+    /// The percentage out of a raw stdout chunk.
+    ///
+    /// 7-Zip rewrites its progress with BACKSPACES, not \r or \n: a whole update sequence
+    /// arrives inside one chunk looking like "  0%\b\b\b\b 45%\b\b\b\b 91%\b\b\b\b".
+    /// Taking the first match pins the bar at 0% for the entire operation — take the last.
+    static func progressInChunk(_ chunk: String) -> (Int, String?)? {
+        guard chunk.contains("%") else { return nil }
+        // erase sequences become separators, so the item name after the last percent is clean
+        let cleaned = chunk.replacingOccurrences(of: "\u{08}", with: " ")
+        let matches = pctRegex.matches(in: cleaned,
+                                       range: NSRange(cleaned.startIndex..., in: cleaned))
+        guard let m = matches.last,
+              let r = Range(m.range(at: 1), in: cleaned),
+              let pct = Int(cleaned[r]), (0...100).contains(pct) else { return nil }
+        let after = cleaned[r.upperBound...].dropFirst()          // past the "%"
+        let head = after.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
+        let parts = head.split(separator: " ", omittingEmptySubsequences: true)
+        let name = parts.last.map(String.init)?.trimmingCharacters(in: .whitespaces)
+        return (pct, (name?.isEmpty ?? true) ? nil : name)
+    }
+
+    private static let pctRegex = try! NSRegularExpression(pattern: "([0-9]{1,3})%")
+
+    /// " 45% 12 - some/file.txt" → (45, "some/file.txt").
+    /// Only fragments that *begin* with the percentage count, so a compression ratio or a
+    /// filename containing "%" is not mistaken for progress.
+    static func parseProgress(_ s: String) -> (Int, String?)? {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        guard let pctIdx = t.firstIndex(of: "%") else { return nil }
+        let head = String(t[t.startIndex..<pctIdx])
+        guard !head.isEmpty, head.count <= 3,
+              let pct = Int(head), (0...100).contains(pct) else { return nil }
+        let rest = String(t[t.index(after: pctIdx)...]).trimmingCharacters(in: .whitespaces)
+        // "12 - name" / "12 + name" / "12" → keep the name only
+        guard !rest.isEmpty else { return (pct, nil) }
+        let parts = rest.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+        if parts.count == 1 { return (pct, nil) }
+        return (pct, String(parts[parts.count - 1]))
     }
 
     // MARK: - Operations
@@ -145,7 +236,8 @@ enum ArchiveEngine {
     /// opening the archive on another platform.
     static func add(sources: [URL], to archive: URL, format: Format,
                     level: Int? = nil, exclusions: [String] = [],
-                    onLine: ((String) -> Void)?) -> Result {
+                    onLine: ((String) -> Void)?,
+                    onProgress: ((Int, String?) -> Void)? = nil) -> Result {
         guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
         var args = ["a", "-t\(format.rawValue)", "-bsp1"]
         if let level { args.append("-mx\(max(0, min(9, level)))") }
@@ -153,21 +245,26 @@ enum ArchiveEngine {
         args.append(archive.path)
         args.append(contentsOf: sources.map(\.path))
         appLog.notice("7z add t=\(format.rawValue, privacy: .public) mx=\(level.map(String.init) ?? "def", privacy: .public) 排除=\(exclusions.count, privacy: .public) 条 → \(archive.lastPathComponent, privacy: .public)")
-        return run(z, args, onLine: onLine)
+        return run(z, args, onLine: onLine, onProgress: onProgress)
     }
 
     /// `7z x <archive> -o<dir> -y`
     static func extract(_ archive: URL, to dir: URL,
-                        onLine: ((String) -> Void)?) -> Result {
+                        onLine: ((String) -> Void)?,
+                    onProgress: ((Int, String?) -> Void)? = nil) -> Result {
         guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return run(z, ["x", archive.path, "-o\(dir.path)", "-y", "-bsp1"], onLine: onLine)
+        // -bb1, not -bsp1: the engine's own percentage never survives a pipe.
+        let track = progressTracker(entries: entries(in: archive), selecting: nil, onProgress: onProgress)
+        return run(z, ["x", archive.path, "-o\(dir.path)", "-y", "-bb1"],
+                   onLine: { l in onLine?(l); track(l) }, onProgress: nil)
     }
 
     /// `7z t <archive>`
-    static func test(_ archive: URL, onLine: ((String) -> Void)?) -> Result {
+    static func test(_ archive: URL, onLine: ((String) -> Void)?,
+                    onProgress: ((Int, String?) -> Void)? = nil) -> Result {
         guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
-        return run(z, ["t", archive.path, "-bsp1"], onLine: onLine)
+        return run(z, ["t", archive.path, "-bsp1"], onLine: onLine, onProgress: onProgress)
     }
 
     /// `7z l` — used to show what is inside without extracting.
@@ -227,12 +324,14 @@ enum ArchiveEngine {
     /// `7z x <archive> -o<dir> [-y] [<inner paths…>]`
     /// Empty `paths` extracts everything. Paths must be paths *inside* the archive.
     static func extractEntries(_ archive: URL, paths: [String], to dir: URL,
-                               onLine: ((String) -> Void)?) -> Result {
+                               onLine: ((String) -> Void)?,
+                    onProgress: ((Int, String?) -> Void)? = nil) -> Result {
         guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        var args = ["x", archive.path, "-o\(dir.path)", "-y", "-bsp1"]
+        var args = ["x", archive.path, "-o\(dir.path)", "-y", "-bb1"]
         args.append(contentsOf: paths)
-        return run(z, args, onLine: onLine)
+        let track = progressTracker(entries: entries(in: archive), selecting: paths, onProgress: onProgress)
+        return run(z, args, onLine: { l in onLine?(l); track(l) }, onProgress: nil)
     }
 
     // MARK: - Editing an archive in place
@@ -267,7 +366,8 @@ enum ArchiveEngine {
     /// `7z a <archive> <items…>` — add files into an existing archive.
     /// 7-Zip infers the container format from the archive's extension.
     static func addInto(_ archive: URL, items: [URL],
-                        onLine: ((String) -> Void)?) -> Result {
+                        onLine: ((String) -> Void)?,
+                    onProgress: ((Int, String?) -> Void)? = nil) -> Result {
         guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
         guard canModify(archive) else {
             return Result(output: modifyRefusal(archive) ?? "该格式不支持修改", status: 1)
@@ -275,12 +375,13 @@ enum ArchiveEngine {
         var args = ["a", "-bsp1", archive.path]
         args.append(contentsOf: items.map(\.path))
         appLog.notice("7z add-into \(archive.lastPathComponent, privacy: .public): \(items.count, privacy: .public) 项")
-        return run(z, args, onLine: onLine)
+        return run(z, args, onLine: onLine, onProgress: onProgress)
     }
 
     /// `7z d <archive> <inner paths…>` — delete entries from an archive.
     static func deleteEntries(_ archive: URL, paths: [String],
-                              onLine: ((String) -> Void)?) -> Result {
+                              onLine: ((String) -> Void)?,
+                    onProgress: ((Int, String?) -> Void)? = nil) -> Result {
         guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
         guard canModify(archive) else {
             return Result(output: modifyRefusal(archive) ?? "该格式不支持修改", status: 1)
@@ -289,13 +390,14 @@ enum ArchiveEngine {
         var args = ["d", "-bsp1", archive.path]
         args.append(contentsOf: paths)
         appLog.notice("7z delete \(archive.lastPathComponent, privacy: .public): \(paths.count, privacy: .public) 条")
-        return run(z, args, onLine: onLine)
+        return run(z, args, onLine: onLine, onProgress: onProgress)
     }
 
     /// Overwrite-then-unlink: 7z has no shred, and APFS has no /dev/random trick that
     /// is cheaper. Three passes is what the original "secure delete" promised.
     static func secureDelete(_ url: URL, passes: Int = 3,
-                             onLine: ((String) -> Void)?) -> Result {
+                             onLine: ((String) -> Void)?,
+                    onProgress: ((Int, String?) -> Void)? = nil) -> Result {
         let fm = FileManager.default
         var isDir: ObjCBool = false
         guard fm.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else {

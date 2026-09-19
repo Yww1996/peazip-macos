@@ -340,6 +340,21 @@ struct StatusBar: View {
 
     var body: some View {
         HStack(spacing: 10) {
+            // Live progress while an operation runs. It lives in the status bar rather than a
+            // modal panel: extraction should not block the window.
+            if let p = model.progress {
+                ProgressView(value: p)
+                    .progressViewStyle(.linear)
+                    .frame(width: 120)
+                Text("\(Int((p * 100).rounded()))%")
+                    .font(.system(size: 11.5)).monospacedDigit()
+                    .foregroundStyle(.secondary)
+                if let d = model.progressDetail, !d.isEmpty {
+                    Text(d).font(.system(size: 11.5)).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                        .frame(maxWidth: 260, alignment: .leading)
+                }
+            }
             Text(model.statusText).font(.system(size: 11.5)).foregroundStyle(.secondary)
             Spacer()
             // Say WHY this archive cannot be edited, rather than showing greyed-out

@@ -337,8 +337,22 @@ struct PeaZip27App: App {
         let dest = root.appendingPathComponent(
             url.deletingPathExtension().lastPathComponent + "-解压自检")
         try? FileManager.default.removeItem(at: dest)
-        let r = ArchiveEngine.extract(url, to: dest, onLine: nil)
+        // Collect the reported percentages so "the progress bar works" is verifiable here
+        // instead of only on screen.
+        var seen: [Int] = []
+        var lastName: String?
+        let r = ArchiveEngine.extract(url, to: dest, onLine: nil) { pct, detail in
+            seen.append(pct)
+            if let detail { lastName = detail }
+        }
         let n = (try? FileManager.default.contentsOfDirectory(atPath: dest.path).count) ?? 0
+        if seen.isEmpty {
+            print("  进度回调  : ❌ 一次都没有（进度条会一直是空的）")
+        } else {
+            let rising = zip(seen, seen.dropFirst()).allSatisfy { $0 <= $1 }
+            print("  进度回调  : \(seen.count) 次 · 范围 \(seen.first ?? 0)%–\(seen.max() ?? 0)% · 单调递增=\(rising ? "是" : "否")")
+            if let lastName { print("  末次明细  : \(lastName)") }
+        }
         print("  解压结果  : \(r.ok ? "✅ 成功" : "❌ 失败") status=\(r.status)")
         print("  落在      : \(dest.path)（\(n) 项）")
         try? FileManager.default.removeItem(at: dest)
