@@ -210,6 +210,15 @@ struct PeaZip27App: App {
         if CommandLine.arguments.contains("--engine-update") { EngineUpdater.headless(forceInstall: true) }
         // Archive browsing, verifiable without clicking: --list <archive>
         // Extraction destination, verifiable without clicking: --extract-test <archive>
+        if let i = CommandLine.arguments.firstIndex(of: "--extract-entry"),
+           i + 3 < CommandLine.arguments.count {
+            let a = URL(fileURLWithPath: CommandLine.arguments[i + 1])
+            let entry = CommandLine.arguments[i + 2]
+            let dest = URL(fileURLWithPath: CommandLine.arguments[i + 3])
+            let r = ArchiveEngine.extractEntries(a, paths: [entry], to: dest, onLine: nil)
+            print("  提取条目 \(entry) → \(r.ok ? "✅ 成功" : "❌ status=\(r.status)")")
+            exit(r.ok ? 0 : 1)
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--extract-test"),
            i + 1 < CommandLine.arguments.count {
             Self.extractTest(CommandLine.arguments[i + 1])

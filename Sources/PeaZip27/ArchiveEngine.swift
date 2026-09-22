@@ -83,10 +83,29 @@ enum ArchiveEngine {
         p.standardError = pipe
 
         var collected = ""
+        var carry = Data()
         let lock = NSLock()
         pipe.fileHandleForReading.readabilityHandler = { fh in
             let d = fh.availableData
-            guard !d.isEmpty, let s = String(data: d, encoding: .utf8) else { return }
+            guard !d.isEmpty else { return }
+            // A multi-byte character can be split across two reads. Decoding each chunk
+            // independently returns nil for the whole chunk and silently drops it — which is
+            // exactly what happens with Chinese filenames, the normal case here. Keep the
+            // incomplete tail and prepend it to the next chunk instead.
+            carry.append(d)
+            var text: String? = String(data: carry, encoding: .utf8)
+            if text == nil {
+                for back in 1...3 where back < carry.count {
+                    if let head = String(data: carry.dropLast(back), encoding: .utf8) {
+                        text = head
+                        carry = Data(carry.suffix(back))
+                        break
+                    }
+                }
+            } else {
+                carry = Data()
+            }
+            guard let s = text else { return }   // still incomplete: wait for the rest
             lock.lock(); collected += s; lock.unlock()
             if let (pct, detail) = progressInChunk(s) { onProgress?(pct, detail) }
             for fragment in s.split(omittingEmptySubsequences: true,
@@ -104,9 +123,12 @@ enum ArchiveEngine {
         p.waitUntilExit()
         pipe.fileHandleForReading.readabilityHandler = nil
         // drain anything left in the pipe
-        if let rest = try? pipe.fileHandleForReading.readToEnd(),
-           let s = String(data: rest, encoding: .utf8) {
-            lock.lock(); collected += s; lock.unlock()
+        if let rest = try? pipe.fileHandleForReading.readToEnd(), !rest.isEmpty {
+            carry.append(rest)
+        }
+        if !carry.isEmpty {
+            // last few bytes only: decode leniently rather than lose the final log line
+            lock.lock(); collected += String(decoding: carry, as: UTF8.self); lock.unlock()
         }
         lock.lock(); let out = collected; lock.unlock()
         return Result(output: out, status: p.terminationStatus)
@@ -131,13 +153,19 @@ enum ArchiveEngine {
         } else {
             files = entries.filter { !$0.isDirectory }
         }
-        var sizes: [String: Int64] = [:]
-        for e in files { sizes[e.path] = e.size }
-        let total = sizes.values.reduce(Int64(0), +)
+        // One queue of sizes PER PATH: an archive may legally hold two records with the
+        // same name, and -bb1 reports that name once per record. A plain dictionary would
+        // collapse them, making the denominator too small and the bar leap to 99% early.
+        var sizes: [String: [Int64]] = [:]
+        for e in files { sizes[e.path, default: []].append(e.size) }
+        let total = sizes.values.flatMap { $0 }.reduce(Int64(0), +)
         var done: Int64 = 0
         var lastPct = -1
         return { line in
-            guard total > 0, let name = processedName(line), let sz = sizes[name] else { return }
+            guard total > 0, let name = processedName(line),
+                  var queue = sizes[name], !queue.isEmpty else { return }
+            let sz = queue.removeFirst()      // consume one size per processed occurrence
+            sizes[name] = queue
             done += sz
             let pct = min(99, Int((Double(done) / Double(total) * 100).rounded()))
             guard pct != lastPct else { return }
@@ -329,6 +357,11 @@ enum ArchiveEngine {
         guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var args = ["x", archive.path, "-o\(dir.path)", "-y", "-bb1"]
+        // "--" so an entry named like "-o/tmp/x" is treated as a path, not a switch.
+        // Without it 7-Zip reads such a name as a second -o and aborts with
+        // "Multiple instances for switch", i.e. any file whose name starts with "-"
+        // becomes impossible to extract.
+        if !paths.isEmpty { args.append("--") }
         args.append(contentsOf: paths)
         let track = progressTracker(entries: entries(in: archive), selecting: paths, onProgress: onProgress)
         return run(z, args, onLine: { l in onLine?(l); track(l) }, onProgress: nil)
@@ -388,6 +421,7 @@ enum ArchiveEngine {
         }
         guard !paths.isEmpty else { return Result(output: "没有要删除的条目", status: 1) }
         var args = ["d", "-bsp1", archive.path]
+        if !paths.isEmpty { args.append("--") }   // see extractEntries: entry names are data, not switches
         args.append(contentsOf: paths)
         appLog.notice("7z delete \(archive.lastPathComponent, privacy: .public): \(paths.count, privacy: .public) 条")
         return run(z, args, onLine: onLine, onProgress: onProgress)

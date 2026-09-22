@@ -252,13 +252,26 @@ final class AppModel: ObservableObject {
             // blank list would look like a broken app.
             let attrs = try? FileManager.default.attributesOfItem(atPath: archive.path)
             let size = (attrs?[.size] as? NSNumber)?.intValue ?? 0
-            let blocked = entries.isEmpty && size > 4096
+            // An empty listing is far more often a corrupt / unsupported / encrypted archive
+            // than a permission problem. Claiming Full Disk Access for all of them sent the
+            // user chasing the wrong fix, so that claim is now made only when the file really
+            // does live inside another app's protected container.
+            let inProtectedContainer = inner.contains("/Library/Containers/")
+                || inner.contains("/Library/Group Containers/")
+            let blocked = entries.isEmpty && size > 4096 && inProtectedContainer
+            let unreadable = entries.isEmpty && size > 4096 && !inProtectedContainer
             // The level is part of the log line: "which folder did it actually list" is the
             // only way to diagnose a descent that appears not to happen.
             appLog.notice("archive level \(inner.isEmpty ? "(根目录)" : inner, privacy: .public) → \(items.count, privacy: .public) 项 / 共 \(entries.count, privacy: .public) 条\(blocked ? " · 疑被系统拦截" : "", privacy: .public)")
             DispatchQueue.main.async {
                 // Ignore a result that arrived after the user navigated elsewhere.
                 guard let self, self.openArchive == archive, self.archivePath == inner else { return }
+                if unreadable {
+                    self.opSheet = OpSheet(
+                        title: "这个压缩包读不出来",
+                        detail: "\(archive.lastPathComponent) 里没列出任何条目。常见原因：文件损坏、格式不受支持、或加了密码。\n\n具体报错见菜单「归档 ▸ 显示上次操作日志」。")
+                    appLog.notice("列表为空且不在受保护目录，已如实提示（不再误报权限）")
+                }
                 if blocked {
                     self.opSheet = OpSheet(
                         title: "读不到压缩包内容",
