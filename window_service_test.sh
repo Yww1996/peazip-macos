@@ -31,7 +31,7 @@ done
 
 echo
 echo "=== 3) 紧接着再触发一次 ==="
-swift tools/service_call.swift /tmp/wintest "用 PeaZip 压缩为 7Z" 2>/dev/null | grep NSPerformService
+swift tools/service_call.swift /tmp/wintest "用 PeaZip 压缩为 7z" 2>/dev/null | grep NSPerformService
 sleep 8
 echo "  最大窗口: $(max_window)   可见窗口: $(visible_count)"
 pgrep -lf "Contents/MacOS/PeaZip" | sed 's/^/  进程: /'

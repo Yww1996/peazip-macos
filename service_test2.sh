@@ -20,8 +20,8 @@ sleep 8
 echo "  产物:"; ls -la /tmp/svc2/ | tail -4 | sed 's/^/    /'
 
 echo
-echo "=== 触发：用 PeaZip 压缩为 7Z（选中单个文件）==="
-swift tools/service_call.swift /tmp/svc2/单文件.txt "用 PeaZip 压缩为 7Z" 2>/dev/null | grep NSPerformService
+echo "=== 触发：用 PeaZip 压缩为 7z（选中单个文件）==="
+swift tools/service_call.swift /tmp/svc2/单文件.txt "用 PeaZip 压缩为 7z" 2>/dev/null | grep NSPerformService
 sleep 8
 echo "  产物:"; ls -la /tmp/svc2/ | tail -5 | sed 's/^/    /'
 

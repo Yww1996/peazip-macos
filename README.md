@@ -6,7 +6,7 @@
 
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-1B2534?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6.4-2C7BEA?style=flat-square)
-![version 0.19](https://img.shields.io/badge/version-0.19-0B4FC0?style=flat-square)
+![version 0.20](https://img.shields.io/badge/version-0.20-0B4FC0?style=flat-square)
 ![license MIT](https://img.shields.io/badge/license-MIT-4C8C4A?style=flat-square)
 
 </div>
@@ -35,9 +35,9 @@
 | | 说明 |
 |---|---|
 | **压缩包内浏览** | 双击压缩包**进包看内容**（不再直接解压）；面包屑逐层进入，7z 的扁平列表被折叠成文件夹，大小按含子项聚合 |
-| **包内直接增删** | 不解压就能往包里加文件、删文件。ZIP / 7Z / TAR 可写；**RAR 明确只读**并给出中文提示，而不是静默失败 |
+| **包内直接增删** | 不解压就能往包里加文件、删文件。ZIP / 7z / TAR 可写；**RAR 明确只读**并给出中文提示，而不是静默失败 |
 | **拖拽** | 拖进窗口 = 加入当前包；包内条目拖到访达 = 解压出来 |
-| **访达右键服务** | 压缩为 ZIP、压缩为 7Z、解压到新文件夹、测试压缩包完整性，共 4 项 |
+| **访达右键服务** | 压缩为 ZIP、压缩为 7z、解压到新文件夹、测试压缩包完整性，共 4 项 |
 | **受保护位置自动处理** | 微信 / QQ 等应用文件夹系统禁止写入 —— 自动改到 `~/Downloads` 并说明原因，而不是抛一个 `status=2` |
 | **排除规则** | macOS 垃圾文件、隐藏文件（默认开）、Windows 冗余文件、自定义通配符 |
 | **引擎自更新** | 从 PeaZip 官方发布版拉取并替换内置引擎，先验后用、失败回滚 |
@@ -138,6 +138,6 @@ $APP --engine-check          # 检查引擎更新（不下载）
 
 <div align="center">
 
-**当前版本 `0.19`**
+**当前版本 `0.20`**
 
 </div>

@@ -230,7 +230,7 @@ enum ArchiveEngine {
         var title: String {
             switch self {
             case .zip: return "ZIP"
-            case .sevenZ: return "7Z"
+            case .sevenZ: return "7z"
             case .tar: return "TAR"
             case .gz: return "GZIP"
             case .xz: return "XZ"
@@ -386,13 +386,13 @@ enum ArchiveEngine {
         if canModify(archive) { return nil }
         switch e {
         case "rar":
-            return "RAR 是专有格式，7-Zip 只能读取、无法写入或删除。要编辑请先转为 ZIP 或 7Z。"
+            return "RAR 是专有格式，7-Zip 只能读取、无法写入或删除。要编辑请先转为 ZIP 或 7z。"
         case "gz", "xz", "bz2", "zst", "zstd", "lzma":
-            return "\(e.uppercased()) 是单文件压缩流，不支持增删条目。要编辑请先转为 ZIP 或 7Z。"
+            return "\(e.uppercased()) 是单文件压缩流，不支持增删条目。要编辑请先转为 ZIP 或 7z。"
         case "iso", "cab":
             return "\(e.uppercased()) 属镜像/只读格式，7-Zip 无法就地修改。"
         default:
-            return "该格式不支持就地增删（仅支持 ZIP / 7Z / TAR）。"
+            return "该格式不支持就地增删（仅支持 ZIP / 7z / TAR）。"
         }
     }
 

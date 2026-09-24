@@ -103,8 +103,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key><string>PeaZip</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.19</string>
-    <key>CFBundleVersion</key><string>19</string>
+    <key>CFBundleShortVersionString</key><string>0.20</string>
+    <key>CFBundleVersion</key><string>20</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <!-- Without CFBundleDevelopmentRegion, AppKit falls back to region "en" and renders
@@ -132,7 +132,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
         </dict>
         <dict>
             <key>NSMenuItem</key>
-            <dict><key>default</key><string>用 PeaZip 压缩为 7Z</string></dict>
+            <dict><key>default</key><string>用 PeaZip 压缩为 7z</string></dict>
             <key>NSMessage</key><string>peaCompress7Z</string>
             <key>NSPortName</key><string>PeaZip</string>
             <key>NSRequiredContext</key>

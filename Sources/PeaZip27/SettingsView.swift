@@ -235,7 +235,7 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             LabeledContent("支持的格式") {
-                Text("打包：ZIP / 7Z / TAR / GZIP / XZ / Zstandard；解包：7z 能识别的全部格式")
+                Text("打包：ZIP / 7z / TAR / GZIP / XZ / Zstandard；解包：7z 能识别的全部格式")
                     .font(.caption).foregroundStyle(.secondary)
             }
 
