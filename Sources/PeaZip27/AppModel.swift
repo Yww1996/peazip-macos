@@ -379,6 +379,13 @@ final class AppModel: ObservableObject {
     /// Marshal 7-Zip's percentage onto the main thread. Publishing on every callback floods
     /// the view; an integer change is enough for a progress bar.
     func reportProgress(_ percent: Int, _ detail: String?) {
+        if percent < 0 {                       // negative is the "clear the bar" sentinel
+            DispatchQueue.main.async { [weak self] in
+                self?.progress = nil
+                self?.progressDetail = nil
+            }
+            return
+        }
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let value = Double(percent) / 100.0
@@ -530,15 +537,23 @@ final class AppModel: ObservableObject {
         let tmp = dragDir ?? FileManager.default.temporaryDirectory
             .appendingPathComponent("peazip27-drag-\(UUID().uuidString)")
         dragDir = tmp
+        // A folder entry can be hundreds of MB: extracting it was silent, so the drag simply
+        // looked frozen. Surface the same progress bar the rest of the app uses.
         DispatchQueue.global(qos: .userInitiated).async {
-            let r = ArchiveEngine.extractEntries(archive, paths: [inner], to: tmp, onLine: nil, onProgress: nil)
+            let r = ArchiveEngine.extractEntries(archive, paths: [inner], to: tmp, onLine: nil,
+                                                 onProgress: { [weak self] pct, name in
+                                                     self?.reportProgress(pct, name)
+                                                 })
             let url = tmp.appendingPathComponent(inner)
             let ok = r.ok && FileManager.default.fileExists(atPath: url.path)
             if !ok {
                 // A rejected drop is otherwise invisible: say exactly why in the log.
                 appLog.error("拖出失败 \(inner, privacy: .public): status=\(r.status, privacy: .public) \(r.output.suffix(160), privacy: .public)")
             }
-            DispatchQueue.main.async { completion(ok ? url : nil) }
+            DispatchQueue.main.async {
+                self.reportProgress(-1, nil)          // clears the bar
+                completion(ok ? url : nil)
+            }
         }
     }
 
