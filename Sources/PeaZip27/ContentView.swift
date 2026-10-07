@@ -236,8 +236,12 @@ struct ContentView: View {
         }
         let provider = NSItemProvider()
         provider.suggestedName = item.name
+        // public.file-url, NOT public.item. Verified with a probe: NSItemProvider(contentsOf:)
+        // — the path taken for real files, which drag out fine — registers public.file-url,
+        // while public.item is not accepted as a file by Finder, so a drop from inside an
+        // archive was rejected outright. Registering fileURL makes the two paths identical.
         provider.registerFileRepresentation(
-            forTypeIdentifier: UTType.item.identifier,
+            forTypeIdentifier: UTType.fileURL.identifier,
             fileOptions: [], visibility: .all
         ) { completion in
             model.extractForDrag(item) { url in

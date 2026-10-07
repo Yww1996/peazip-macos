@@ -533,9 +533,12 @@ final class AppModel: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async {
             let r = ArchiveEngine.extractEntries(archive, paths: [inner], to: tmp, onLine: nil, onProgress: nil)
             let url = tmp.appendingPathComponent(inner)
-            DispatchQueue.main.async {
-                completion(r.ok && FileManager.default.fileExists(atPath: url.path) ? url : nil)
+            let ok = r.ok && FileManager.default.fileExists(atPath: url.path)
+            if !ok {
+                // A rejected drop is otherwise invisible: say exactly why in the log.
+                appLog.error("拖出失败 \(inner, privacy: .public): status=\(r.status, privacy: .public) \(r.output.suffix(160), privacy: .public)")
             }
+            DispatchQueue.main.async { completion(ok ? url : nil) }
         }
     }
 
