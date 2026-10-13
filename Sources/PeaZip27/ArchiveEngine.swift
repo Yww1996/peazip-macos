@@ -356,7 +356,7 @@ enum ArchiveEngine {
                     onProgress: ((Int, String?) -> Void)? = nil) -> Result {
         guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        var args = ["x", archive.path, "-o\(dir.path)", "-y", "-bb1"]
+        var args = ["x", archive.path, "-o\(dir.path)", "-y", "-bb1", "-spd"]
         // "--" so an entry named like "-o/tmp/x" is treated as a path, not a switch.
         // Without it 7-Zip reads such a name as a second -o and aborts with
         // "Multiple instances for switch", i.e. any file whose name starts with "-"

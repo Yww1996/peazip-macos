@@ -157,17 +157,16 @@ struct ContentView: View {
         Table(displayed, selection: $model.selection, sortOrder: $sortOrder) {
             TableColumn("名称", value: \.name) { item in
                 HStack(spacing: 7) {
-                    // The drag source is the ICON only. Putting .onDrag on the whole cell
-                    // made the cell a drag target, and the double-click (primaryAction)
-                    // stopped firing — you could not enter a folder inside an archive.
                     Image(systemName: item.symbol)
-                        .foregroundStyle(item.tint)
+                        .foregroundStyle(model.selection.contains(item.url) ? Color.white : item.tint)
                         .frame(width: 16)
-                        .contentShape(Rectangle())
-                        .onDrag { dragProvider(for: item) }
-                        .help(item.fromArchive ? "拖到访达即可导出这个文件" : "拖到访达即可拷贝")
                     Text(item.name).lineLimit(1)
                 }
+                .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
+                .overlay {
+                    FileRowDragSurface(item: item, visibleItems: displayed, model: model)
+                }
+                .help(item.fromArchive ? "拖到桌面或访达即可解压；双击进入或打开" : "拖到访达即可拷贝")
             }
             TableColumn("类型", value: \.kind) { Text($0.kind).foregroundStyle(.secondary) }
                 .width(min: 80, ideal: 110)
@@ -227,29 +226,189 @@ struct ContentView: View {
         }
     }
 
-    /// Drag payload for a row: an archive entry is extracted on demand — Finder asks for
-    /// the file while the drag is in progress, so a large entry does not stall the drag —
-    /// while a real file is handed over as-is.
-    private func dragProvider(for item: FileItem) -> NSItemProvider {
-        guard item.fromArchive else {
-            return NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
+}
+
+
+// MARK: - Native Finder drag-out
+
+/// A native event surface keeps name-cell dragging independent of SwiftUI's
+/// drag recognizer, which consumes the Table's double-click action.
+private struct FileRowDragSurface: NSViewRepresentable {
+    let item: FileItem
+    let visibleItems: [FileItem]
+    let model: AppModel
+
+    func makeNSView(context: Context) -> FileRowDragView { FileRowDragView() }
+    func updateNSView(_ view: FileRowDragView, context: Context) {
+        view.item = item
+        view.visibleItems = visibleItems
+        view.model = model
+    }
+}
+
+private final class FileRowDragView: NSView, NSDraggingSource {
+    var item: FileItem?
+    var visibleItems: [FileItem] = []
+    weak var model: AppModel?
+    private var mouseStart: NSPoint?
+    private var collapseOnClick = false
+    // NSFilePromiseProvider's delegate is weak. Retain delegates for the session;
+    // queued write operations also retain theirs until delivery completes.
+    private var promises: [ArchiveDragPromise] = []
+
+    override func mouseDown(with event: NSEvent) {
+        guard let item, let model else { return }
+        window?.makeFirstResponder(enclosingTable ?? self)
+        mouseStart = event.locationInWindow
+        collapseOnClick = false
+        if event.modifierFlags.contains(.command) {
+            if model.selection.contains(item.url) { model.selection.remove(item.url) }
+            else { model.selection.insert(item.url) }
+        } else if event.modifierFlags.contains(.shift),
+                  let anchor = visibleItems.firstIndex(where: { model.selection.contains($0.url) }),
+                  let end = visibleItems.firstIndex(where: { $0.url == item.url }) {
+            model.selection.formUnion(visibleItems[min(anchor, end)...max(anchor, end)].map(\.url))
+        } else if !model.selection.contains(item.url) {
+            model.selection = [item.url]
+        } else {
+            collapseOnClick = true // keep a multiple selection until we know it isn't a drag
         }
-        let provider = NSItemProvider()
-        provider.suggestedName = item.name
-        // public.file-url, NOT public.item. Verified with a probe: NSItemProvider(contentsOf:)
-        // — the path taken for real files, which drag out fine — registers public.file-url,
-        // while public.item is not accepted as a file by Finder, so a drop from inside an
-        // archive was rejected outright. Registering fileURL makes the two paths identical.
-        provider.registerFileRepresentation(
-            forTypeIdentifier: UTType.fileURL.identifier,
-            fileOptions: [], visibility: .all
-        ) { completion in
-            model.extractForDrag(item) { url in
-                completion(url, false, url == nil ? DragFailure() : nil)
+        if event.clickCount == 2 {
+            mouseStart = nil
+            collapseOnClick = false
+            model.open(item)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if collapseOnClick, let item { model?.selection = [item.url] }
+        mouseStart = nil
+        collapseOnClick = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = mouseStart, let item, let model,
+              hypot(event.locationInWindow.x - start.x, event.locationInWindow.y - start.y) >= 4 else { return }
+        mouseStart = nil
+        collapseOnClick = false
+        let selected = model.selection.contains(item.url)
+            ? visibleItems.filter { model.selection.contains($0.url) } : [item]
+        var draggingItems: [NSDraggingItem] = []
+        promises = []
+        for entry in selected {
+            let writer: NSPasteboardWriting
+            if entry.fromArchive {
+                guard let archive = model.openArchive, let inner = entry.entryPath else { continue }
+                let promise = ArchiveDragPromise(archive: archive, inner: inner, item: entry, model: model)
+                promises.append(promise)
+                writer = RetainedFilePromiseProvider(fileType: entry.isDirectory ? UTType.folder.identifier :
+                    (UTType(filenameExtension: entry.url.pathExtension)?.identifier ?? UTType.data.identifier),
+                    promise: promise)
+            } else {
+                writer = entry.url as NSURL
             }
-            return nil
+            let draggingItem = NSDraggingItem(pasteboardWriter: writer)
+            let image = NSImage(systemSymbolName: entry.symbol, accessibilityDescription: entry.name)
+                ?? NSWorkspace.shared.icon(forFile: entry.url.path)
+            draggingItem.setDraggingFrame(NSRect(x: 0, y: 0, width: 26, height: 26), contents: image)
+            draggingItems.append(draggingItem)
         }
-        return provider
+        guard !draggingItems.isEmpty else { return }
+        let session = beginDraggingSession(with: draggingItems, event: event, source: self)
+        session.animatesToStartingPositionsOnCancelOrFail = true
+        session.draggingFormation = .pile
+    }
+
+    func draggingSession(_ session: NSDraggingSession,
+                         sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
+        // An archive entry is always copied; dragging never deletes its source.
+        context == .outsideApplication ? .copy : []
+    }
+
+    private var enclosingTable: NSTableView? {
+        var parent = superview
+        while let view = parent {
+            if let table = view as? NSTableView { return table }
+            parent = view.superview
+        }
+        return nil
+    }
+}
+
+/// Keep the delegate alive even if the source row disappears during delivery.
+private final class RetainedFilePromiseProvider: NSFilePromiseProvider {
+    private var promise: ArchiveDragPromise?
+    override init() { super.init() }
+    convenience init(fileType: String, promise: ArchiveDragPromise) {
+        self.init()
+        self.promise = promise
+        self.fileType = fileType
+        self.delegate = promise
+    }
+    required init?(coder: NSCoder) { fatalError("Not used for archived views") }
+}
+
+private final class ArchiveDragPromise: NSObject, NSFilePromiseProviderDelegate {
+    let archive: URL
+    let inner: String
+    let item: FileItem
+    weak var model: AppModel?
+    // Serialize extraction jobs so progress and 7z processes don't compete.
+    private static let queue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "com.yww.pea27.drag-out"
+        queue.maxConcurrentOperationCount = 1
+        queue.qualityOfService = .userInitiated
+        return queue
+    }()
+
+    init(archive: URL, inner: String, item: FileItem, model: AppModel) {
+        self.archive = archive
+        self.inner = inner
+        self.item = item
+        self.model = model
+    }
+
+    func operationQueue(for filePromiseProvider: NSFilePromiseProvider) -> OperationQueue { Self.queue }
+
+    func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider,
+                             fileNameForType fileType: String) -> String { item.name }
+
+    func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, writePromiseTo destination: URL,
+                             completionHandler: @escaping (Error?) -> Void) {
+        let fm = FileManager.default
+        let scratch = fm.temporaryDirectory.appendingPathComponent("peazip-drag-\(UUID().uuidString)")
+        defer {
+            try? fm.removeItem(at: scratch)
+            DispatchQueue.main.async { [weak model] in model?.reportProgress(-1, nil) }
+        }
+        // Snapshot the archive and path at mouse-down: navigating to another archive
+        // during a drag must never change which file Finder receives.
+        guard !inner.hasPrefix("/"), !inner.split(separator: "/").contains(".."),
+              ArchiveEngine.isAvailable else {
+            completionHandler(DragFailure())
+            return
+        }
+        do {
+            try fm.createDirectory(at: scratch, withIntermediateDirectories: true)
+            DispatchQueue.main.async { [weak model] in model?.reportProgress(0, self.item.name) }
+            let result = ArchiveEngine.extractEntries(archive, paths: [inner], to: scratch, onLine: nil,
+                onProgress: { [weak model] percent, name in
+                    DispatchQueue.main.async { model?.reportProgress(percent, name) }
+                })
+            let source = scratch.appendingPathComponent(inner)
+            guard result.ok, fm.fileExists(atPath: source.path) else {
+                appLog.error("拖出失败 \(self.inner, privacy: .public): \(result.output.suffix(200), privacy: .public)")
+                completionHandler(DragFailure())
+                return
+            }
+            // Finder supplies the final file URL, including any collision resolution.
+            // copyItem refuses to overwrite an existing destination.
+            try fm.copyItem(at: source, to: destination)
+            completionHandler(nil)
+        } catch {
+            completionHandler(error)
+        }
     }
 }
 
