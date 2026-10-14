@@ -851,9 +851,14 @@ final class AppModel: ObservableObject {
     }
 
     private var itemSummary: String {
+        // Directories are NOT filtered out of the size sum. A folder item carries its whole
+        // subtree's aggregated size (which is why the row can show "507.1 MB"), and its
+        // children live in a deeper level rather than in `items`, so summing everything here
+        // is correct and cannot double count. Filtering them out made an archive whose root
+        // holds a single folder report "解压后 0 KB" right next to that 507.1 MB row.
         let dirs = items.filter(\.isDirectory).count
         let files = items.count - dirs
-        let total = items.filter { !$0.isDirectory }.reduce(Int64(0)) { $0 + $1.size }
+        let total = items.reduce(Int64(0)) { $0 + $1.size }
         let f = ByteCountFormatter(); f.countStyle = .file
         if isBrowsingArchive {
             let packed = items.compactMap(\.packedSize).reduce(Int64(0), +)
