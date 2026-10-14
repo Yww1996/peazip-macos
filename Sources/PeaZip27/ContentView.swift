@@ -57,6 +57,7 @@ struct ContentView: View {
                 OperationLogSheet(sheet: sheet)
             }
         }
+        .background(ProgressPopup(active: model.busy && model.opSheet == nil))
     }
 
     // MARK: - Toolbar (SF Symbols = vector, crisp at any scale)
@@ -644,5 +645,61 @@ struct AddArchiveSheet: View {
         .padding(18)
         .frame(width: 470)
         .onAppear { if model.addArchiveName.isEmpty { model.addArchiveName = "archive" } }
+    }
+}
+
+
+// MARK: - Operation progress
+
+/// Shows an operation's progress as a popup instead of only in the corner status bar.
+///
+/// Held back ~0.7 s on purpose: nearly every extraction finishes in a blink, and a sheet
+/// flashing on each quick one is worse than the quiet status line it replaces. A 500 MB
+/// folder, on the other hand, deserves to be impossible to miss.
+private struct ProgressPopup: View {
+    let active: Bool
+    @State private var show = false
+
+    var body: some View {
+        Color.clear
+            .sheet(isPresented: $show) { ProgressSheet() }
+            .task(id: active) {
+                guard active else { show = false; return }
+                try? await Task.sleep(nanoseconds: 700_000_000)
+                if !Task.isCancelled { show = true }
+            }
+    }
+}
+
+private struct ProgressSheet: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 9) {
+                ProgressView().controlSize(.small)
+                Text(model.currentOp.map { "正在\($0)…" } ?? "正在处理…")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            if let p = model.progress {
+                ProgressView(value: p).progressViewStyle(.linear).frame(width: 340)
+                HStack(spacing: 8) {
+                    Text("\(Int((p * 100).rounded()))%").monospacedDigit()
+                    if let d = model.progressDetail, !d.isEmpty {
+                        Text(d).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                }
+                .font(.system(size: 11.5))
+                .frame(width: 340, alignment: .leading)
+            } else {
+                ProgressView().progressViewStyle(.linear).frame(width: 340)
+                Text("正在准备…").font(.system(size: 11.5)).foregroundStyle(.secondary)
+            }
+            Text("完成后自动关闭。")
+                .font(.system(size: 11)).foregroundStyle(.tertiary)
+        }
+        .padding(22)
+        .frame(width: 384)
     }
 }
