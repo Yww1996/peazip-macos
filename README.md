@@ -6,7 +6,7 @@
 
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-1B2534?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6.4-2C7BEA?style=flat-square)
-![version 0.25](https://img.shields.io/badge/version-0.25-0B4FC0?style=flat-square)
+![version 0.26](https://img.shields.io/badge/version-0.26-0B4FC0?style=flat-square)
 ![license MIT](https://img.shields.io/badge/license-MIT-4C8C4A?style=flat-square)
 
 </div>
@@ -36,6 +36,7 @@
 |---|---|
 | **压缩包内浏览** | 双击压缩包**进包看内容**（不再直接解压）；面包屑逐层进入，7z 的扁平列表被折叠成文件夹，大小按含子项聚合 |
 | **包内直接增删** | 不解压就能往包里加文件、删文件。ZIP / 7z / TAR 可写；**RAR 明确只读**并给出中文提示，而不是静默失败 |
+| **图片预览** | 主界面右侧预览选中的本地图片或压缩包内图片，显示像素尺寸与文件信息；可用工具栏按钮或 ⌥⌘P 收起/展开。多帧图片显示静态预览 |
 | **拖拽** | 直接拖动文件名或图标到桌面 / 访达即可解压，支持多选和完整文件夹；双击仍可进入文件夹。使用 macOS 文件承诺机制，松开后提取并交付，保留中文文件名与子目录；拖进窗口 = 加入当前包 |
 | **访达右键服务** | 压缩为 ZIP、压缩为 7z、解压到新文件夹、测试压缩包完整性，共 4 项 |
 | **受保护位置自动处理** | 微信 / QQ 等应用文件夹系统禁止写入 —— 自动改到 `~/Downloads` 并说明原因，而不是抛一个 `status=2` |
@@ -138,6 +139,14 @@ $APP --engine-check          # 检查引擎更新（不下载）
 
 <div align="center">
 
-**当前版本 `0.25`**
+**当前版本 `0.26`**
 
 </div>
+
+## 图片预览验证
+
+```bash
+PATH="$PWD/assets/engine/7z:$PATH" swift test
+```
+
+覆盖本地大图缩放、EXIF 旋转、多帧 GIF、压缩包内中文路径、损坏文件、路径校验与取消读取。

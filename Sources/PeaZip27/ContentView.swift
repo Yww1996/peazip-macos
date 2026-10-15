@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var sidebarSel: URL?
     @State private var query = ""
     @State private var sortOrder = [KeyPathComparator(\FileItem.name)]
+    @AppStorage("showImagePreview") private var showImagePreview = true
 
     var body: some View {
         NavigationSplitView {
@@ -34,6 +35,11 @@ struct ContentView: View {
             .navigationSubtitle(model.statusText)
         }
         .toolbar { toolbarContent }
+        .inspector(isPresented: $showImagePreview) {
+            ImagePreviewPane(item: previewItem, archive: model.openArchive,
+                             selectionCount: model.selection.count)
+                .inspectorColumnWidth(min: 240, ideal: 300, max: 440)
+        }
         .searchable(text: $query, placement: .toolbar, prompt: "搜索")
         .onChange(of: sidebarSel) { _, new in if let u = new { model.go(to: u) } }
         .onChange(of: model.currentURL) { _, new in
@@ -64,6 +70,16 @@ struct ContentView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                showImagePreview.toggle()
+            } label: {
+                Label("图片预览", systemImage: "sidebar.right")
+                    .symbolVariant(showImagePreview ? .fill : .none)
+            }
+            .help(showImagePreview ? "收起图片预览" : "显示图片预览")
+            .keyboardShortcut("p", modifiers: [.command, .option])
+        }
         ToolbarItemGroup(placement: .navigation) {
             Button { model.goBack() } label: { Image(systemName: "chevron.backward") }
                 .disabled(!model.canGoBack).help("后退")
@@ -146,6 +162,11 @@ struct ContentView: View {
     private var filtered: [FileItem] {
         guard !query.isEmpty else { return model.items }
         return model.items.filter { $0.name.localizedCaseInsensitiveContains(query) }
+    }
+
+    private var previewItem: FileItem? {
+        guard model.selection.count == 1, let url = model.selection.first else { return nil }
+        return model.items.first { $0.url == url }
     }
 
     /// Clicking a column header re-orders. An explicit sort overrides the folders-first

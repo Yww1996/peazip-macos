@@ -14,6 +14,11 @@ let package = Package(
         .executableTarget(
             name: "PeaZip27",
             path: "Sources/PeaZip27"
+        ),
+        .testTarget(
+            name: "PeaZip27Tests",
+            dependencies: ["PeaZip27"],
+            path: "Tests/PeaZip27Tests"
         )
     ]
 )
