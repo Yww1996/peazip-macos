@@ -715,10 +715,10 @@ final class AppModel: ObservableObject {
     }
 
     func goBack() {
-        // Inside an archive, "back" means leaving the archive: that is where the user came
-        // from. Without this the path changed while the list stayed on the archive, because
-        // reload() deliberately bails while browsing.
-        if isBrowsingArchive { exitArchive(); return }
+        // Inside an archive, "back" steps up ONE level — the same thing 上级 does — and only
+        // leaves the archive when already at its root. Exiting from any depth made the button
+        // jump straight out of the archive, losing the level the user was working in.
+        if isBrowsingArchive { goUp(); return }
         guard let prev = backStack.popLast() else { return }
         forwardStack.append(currentURL)
         currentURL = prev
