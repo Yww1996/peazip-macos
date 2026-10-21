@@ -256,8 +256,11 @@ final class AppModel: ObservableObject {
             // than a permission problem. Claiming Full Disk Access for all of them sent the
             // user chasing the wrong fix, so that claim is now made only when the file really
             // does live inside another app's protected container.
-            let inProtectedContainer = inner.contains("/Library/Containers/")
-                || inner.contains("/Library/Group Containers/")
+            // archive.path — the FILE SYSTEM path. `inner` is the path inside the archive
+            // ("folder/sub"), so testing it here made this branch dead code and the Full Disk
+            // Access hint never fired.
+            let inProtectedContainer = archive.path.contains("/Library/Containers/")
+                || archive.path.contains("/Library/Group Containers/")
             let blocked = entries.isEmpty && size > 4096 && inProtectedContainer
             let unreadable = entries.isEmpty && size > 4096 && !inProtectedContainer
             // The level is part of the log line: "which folder did it actually list" is the
