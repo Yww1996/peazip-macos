@@ -420,7 +420,10 @@ enum ArchiveEngine {
             return Result(output: modifyRefusal(archive) ?? "该格式不支持修改", status: 1)
         }
         guard !paths.isEmpty else { return Result(output: "没有要删除的条目", status: 1) }
-        var args = ["d", "-bsp1", archive.path]
+        // -spd: "--" stops switch parsing but NOT wildcard matching, so an entry literally
+        // named "a*.txt" would also match "abc.txt" and delete it. Verified: without -spd a
+        // single delete removed 2 files, with it exactly 1. extractEntries already passes -spd.
+        var args = ["d", "-bsp1", "-spd", archive.path]
         if !paths.isEmpty { args.append("--") }   // see extractEntries: entry names are data, not switches
         args.append(contentsOf: paths)
         appLog.notice("7z delete \(archive.lastPathComponent, privacy: .public): \(paths.count, privacy: .public) 条")
