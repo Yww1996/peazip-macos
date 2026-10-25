@@ -116,6 +116,12 @@ enum ArchiveEngine {
             }
         }
 
+        // Ignore SIGPIPE before spawning anything. Learned from upstream PeaZip 11.4
+        // (fpSignal(SIGPIPE, SIG_IGN)): writing to the stdin of a backend that has already
+        // exited must not terminate the GUI — piped passwords for encrypted archives are the
+        // realistic path there. macOS default action for SIGPIPE is process termination.
+        signal(SIGPIPE, SIG_IGN)
+
         do { try p.run() } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
             return Result(output: "无法启动 \(tool.path)：\(error.localizedDescription)", status: -1)
