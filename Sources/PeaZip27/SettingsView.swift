@@ -69,6 +69,16 @@ enum Prefs {
 }
 
 struct SettingsView: View {
+    /// Read once per launch: spawning 7z on every redraw would be wasteful, and this is the
+    /// number a user needs to confirm an engine update actually took.
+    static let engineVersionText: String = {
+        guard let e = ArchiveEngine.sevenZip,
+              let v = EngineUpdater.parseEngineVersion(EngineUpdater.rawBanner(of: e)) else {
+            return "引擎版本未知"
+        }
+        return "内置 7-Zip \(v)"
+    }()
+
     @EnvironmentObject private var model: AppModel
 
     @AppStorage(PrefKey.defaultFormat) private var defaultFormat = ArchiveEngine.Format.zip.rawValue
@@ -237,6 +247,10 @@ struct SettingsView: View {
             LabeledContent("支持的格式") {
                 Text("打包：ZIP / 7z / TAR / GZIP / XZ / Zstandard；解包：7z 能识别的全部格式")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+
+            Section("当前引擎") {
+                LabeledContent("7z 版本") { Text(Self.engineVersionText) }
             }
 
             Section("引擎更新") {
