@@ -29,9 +29,15 @@ struct FileItem: Identifiable, Hashable {
 
     var fromArchive: Bool { entryPath != nil }
 
+    /// Genuinely archive formats only. Deliberately NOT including zip-based documents
+    /// (odt/ods/epub/docx) or disk images we would only pretend to handle well: taking those
+    /// over would steal the default app from LibreOffice / Pages for no benefit.
     static let archiveExtensions: Set<String> = [
-        "zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "tbz", "xz", "txz",
-        "zst", "zstd", "lzma", "cab", "iso", "jar", "war", "apk", "xz", "pea"
+        "zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "tbz", "tbz2", "xz", "txz",
+        "zst", "zstd", "lzma", "lz", "lz4", "br", "cab", "iso", "jar", "war", "apk",
+        "pea", "arc", "arj", "lha", "lzh", "cpio", "deb", "rpm", "xar", "pkg", "wim",
+        "chm", "zipx", "z01", "cbz", "cbr", "cb7", "cbt", "ipa", "nupkg", "whl",
+        "crx", "xpi"
     ]
     var isArchive: Bool {
         fromArchive ? false : Self.archiveExtensions.contains(url.pathExtension.lowercased())
@@ -228,6 +234,10 @@ final class AppModel: ObservableObject {
         archivePath = ""
         currentURL = a.deletingLastPathComponent()
         reload()
+        // Retire the session's scratch dirs (previews and drag-out extracts), which otherwise
+        // accumulated for the lifetime of the process. Skipped while an operation runs: a
+        // drag or preview may still be reading from them.
+        if !busy { cleanPreviewDir() }
         DispatchQueue.main.async { [weak self] in self?.selection = [a] }
     }
 
