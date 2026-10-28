@@ -84,6 +84,7 @@ enum ArchiveEngine {
 
         var collected = ""
         var carry = Data()
+        var lineCarry = ""   // unfinished text line across reads
         let lock = NSLock()
         pipe.fileHandleForReading.readabilityHandler = { fh in
             let d = fh.availableData
@@ -108,8 +109,15 @@ enum ArchiveEngine {
             guard let s = text else { return }   // still incomplete: wait for the rest
             lock.lock(); collected += s; lock.unlock()
             if let (pct, detail) = progressInChunk(s) { onProgress?(pct, detail) }
-            for fragment in s.split(omittingEmptySubsequences: true,
-                                    whereSeparator: { $0 == "\n" || $0 == "\r" }) {
+            // A read boundary is NOT a line boundary: "- photos/ima" then "ge.png\n" arrive
+            // as two chunks. Emitting both fragments separately loses the "- " prefix that
+            // processedName keys on, so progress silently skips that file. Carry the
+            // unfinished tail into the next read and emit only complete records.
+            lineCarry += s
+            let records = lineCarry.split(omittingEmptySubsequences: false,
+                                          whereSeparator: { $0 == "\n" || $0 == "\r" })
+            lineCarry = records.last.map(String.init) ?? ""
+            for fragment in records.dropLast() where !fragment.isEmpty {
                 let text = String(fragment)
                 // Progress fragments stay out of the log the sheet shows on failure.
                 if parseProgress(text) == nil { onLine?(text) }
