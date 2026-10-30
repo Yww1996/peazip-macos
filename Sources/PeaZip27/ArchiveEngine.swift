@@ -85,10 +85,14 @@ enum ArchiveEngine {
         var collected = ""
         var carry = Data()
         var lineCarry = ""   // unfinished text line across reads
+        var sawEOF = false   // reader reached end of stream
         let lock = NSLock()
         pipe.fileHandleForReading.readabilityHandler = { fh in
             let d = fh.availableData
-            guard !d.isEmpty else { return }
+            if d.isEmpty {                      // EOF: nothing more will arrive
+                lock.lock(); sawEOF = true; lock.unlock()
+                return
+            }
             // A multi-byte character can be split across two reads. Decoding each chunk
             // independently returns nil for the whole chunk and silently drops it — which is
             // exactly what happens with Chinese filenames, the normal case here. Keep the
@@ -135,16 +139,26 @@ enum ArchiveEngine {
             return Result(output: "无法启动 \(tool.path)：\(error.localizedDescription)", status: -1)
         }
         p.waitUntilExit()
+        // Wait for the READER to report EOF. Setting readabilityHandler = nil does NOT join a
+        // callback that is already running, and the old code then called readToEnd() on the
+        // same handle concurrently — the tail of the output could be dropped, or appended
+        // after the snapshot below. EOF is the only sound signal that the reader is done.
+        // The deadline is a safety net: normally EOF arrives immediately.
+        let deadline = Date().addingTimeInterval(0.5)
+        while Date() < deadline {
+            lock.lock(); let eof = sawEOF; lock.unlock()
+            if eof { break }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
         pipe.fileHandleForReading.readabilityHandler = nil
-        // drain anything left in the pipe
-        if let rest = try? pipe.fileHandleForReading.readToEnd(), !rest.isEmpty {
-            carry.append(rest)
-        }
+        lock.lock()
         if !carry.isEmpty {
-            // last few bytes only: decode leniently rather than lose the final log line
-            lock.lock(); collected += String(decoding: carry, as: UTF8.self); lock.unlock()
+            // a few trailing bytes that never completed a character
+            collected += String(decoding: carry, as: UTF8.self)
+            carry = Data()
         }
-        lock.lock(); let out = collected; lock.unlock()
+        let out = collected
+        lock.unlock()
         return Result(output: out, status: p.terminationStatus)
     }
 
