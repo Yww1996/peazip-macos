@@ -210,6 +210,17 @@ struct PeaZip27App: App {
         if CommandLine.arguments.contains("--engine-update") { EngineUpdater.headless(forceInstall: true) }
         // Archive browsing, verifiable without clicking: --list <archive>
         // Extraction destination, verifiable without clicking: --extract-test <archive>
+        if let i = CommandLine.arguments.firstIndex(of: "--zipnames"),
+           i + 1 < CommandLine.arguments.count {
+            let url = URL(fileURLWithPath: CommandLine.arguments[i + 1])
+            if let names = LegacyZipNames.correctedNames(in: url) {
+                print("  需要修正的条目名: \(names.count) 条")
+                for n in names { print("    \(n)") }
+            } else {
+                print("  ✅ 无需修正（都已带 UTF-8 标志，或本就是合法 UTF-8）")
+            }
+            exit(0)
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--extract-entry"),
            i + 3 < CommandLine.arguments.count {
             let a = URL(fileURLWithPath: CommandLine.arguments[i + 1])
