@@ -312,8 +312,10 @@ enum ArchiveEngine {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         // -bb1, not -bsp1: the engine's own percentage never survives a pipe.
         let track = progressTracker(entries: entries(in: archive), selecting: nil, onProgress: onProgress)
-        return run(z, ["x", archive.path, "-o\(dir.path)", "-y", "-bb1"],
-                   onLine: { l in onLine?(l); track(l) }, onProgress: nil)
+        let res = run(z, ["x", archive.path, "-o\(dir.path)", "-y", "-bb1"],
+                      onLine: { l in onLine?(l); track(l) }, onProgress: nil)
+        if res.ok { renameLegacyOutput(in: dir, archive: archive) }
+        return res
     }
 
     /// `7z t <archive>`
@@ -337,6 +339,57 @@ enum ArchiveEngine {
         let size: Int64
         let packed: Int64
         let modified: Date?
+    }
+
+
+    /// 7-Zip matches entry names exactly, so a recovered (GBK) display path must be mapped back
+    /// to the spelling 7-Zip itself printed. Both lists come from the central directory in the
+    /// same order — that index is the only reliable pairing, since the names differ by design.
+    private static func engineOperands(_ displayPaths: [String], in archive: URL) -> [String] {
+        guard archive.pathExtension.lowercased() == "zip",
+              let corrected = LegacyZipNames.correctedNames(in: archive) else { return displayPaths }
+        let raw = rawEntryPaths(in: archive)
+        guard raw.count == corrected.count else { return displayPaths }
+        return displayPaths.map { p in
+            guard let i = corrected.firstIndex(of: p) else { return p }
+            return raw[i]
+        }
+    }
+
+    /// Entry paths exactly as 7-Zip prints them (the archive's own record is skipped).
+    private static func rawEntryPaths(in archive: URL) -> [String] {
+        guard let z = sevenZip else { return [] }
+        let r = run(z, ["l", "-slt", archive.path], onLine: nil, onProgress: nil)
+        var paths: [String] = []
+        var sawFirst = false
+        for line in r.output.split(separator: "\n") where line.hasPrefix("Path = ") {
+            // The FIRST record is the archive itself, and its Path is mojibake too, so
+            // comparing it against archive.path never matches — skip positionally instead.
+            if !sawFirst { sawFirst = true; continue }
+            let p = String(line.dropFirst("Path = ".count))
+            if !p.isEmpty { paths.append(p) }
+        }
+        return paths
+    }
+
+    /// 7-Zip writes the names it holds, so extracting a GBK zip still lands mojibake
+    /// filenames on disk. Rename them to the recovered names once the extraction succeeded.
+    /// Deepest paths first: renaming a parent must not invalidate a child's source path.
+    static func renameLegacyOutput(in dir: URL, archive: URL) {
+        guard archive.pathExtension.lowercased() == "zip",
+              let corrected = LegacyZipNames.correctedNames(in: archive) else { return }
+        let raw = rawEntryPaths(in: archive)
+        guard raw.count == corrected.count else { return }
+        let fm = FileManager.default
+        for i in raw.indices.sorted(by: { raw[$0].count > raw[$1].count }) where raw[i] != corrected[i] {
+            let from = dir.appendingPathComponent(raw[i])
+            let to = dir.appendingPathComponent(corrected[i])
+            guard fm.fileExists(atPath: from.path) else { continue }
+            try? fm.createDirectory(at: to.deletingLastPathComponent(),
+                                    withIntermediateDirectories: true)
+            try? fm.moveItem(at: from, to: to)
+            appLog.notice("legacy rename: \(corrected[i], privacy: .public)")
+        }
     }
 
     /// `7z l -slt` — one record per entry as `Key = Value` lines, blank line between
@@ -409,12 +462,12 @@ enum ArchiveEngine {
         // "Multiple instances for switch", i.e. any file whose name starts with "-"
         // becomes impossible to extract.
         if !paths.isEmpty { args.append("--") }
-        // Recovered (GBK) names must be translated back: 7-Zip matches exactly.
-        if archive.pathExtension.lowercased() == "zip" { _ = entries(in: archive) }
-        let operands = paths.map { LegacyNameMap.engineName($0, in: archive) }
+        let operands = engineOperands(paths, in: archive)
         args.append(contentsOf: operands)
         let track = progressTracker(entries: entries(in: archive), selecting: paths, onProgress: onProgress)
-        return run(z, args, onLine: { l in onLine?(l); track(l) }, onProgress: nil)
+        let res = run(z, args, onLine: { l in onLine?(l); track(l) }, onProgress: nil)
+        if res.ok { renameLegacyOutput(in: dir, archive: archive) }
+        return res
     }
 
     // MARK: - Editing an archive in place
@@ -475,9 +528,7 @@ enum ArchiveEngine {
         // single delete removed 2 files, with it exactly 1. extractEntries already passes -spd.
         var args = ["d", "-bsp1", "-spd", archive.path]
         if !paths.isEmpty { args.append("--") }   // see extractEntries: entry names are data, not switches
-        // Recovered (GBK) names must be translated back: 7-Zip matches exactly.
-        if archive.pathExtension.lowercased() == "zip" { _ = entries(in: archive) }
-        let operands = paths.map { LegacyNameMap.engineName($0, in: archive) }
+        let operands = engineOperands(paths, in: archive)
         args.append(contentsOf: operands)
         appLog.notice("7z delete \(archive.lastPathComponent, privacy: .public): \(paths.count, privacy: .public) 条")
         return run(z, args, onLine: onLine, onProgress: onProgress)
