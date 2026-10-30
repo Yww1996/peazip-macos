@@ -373,6 +373,25 @@ enum ArchiveEngine {
                              packed: Int64(dict["Packed Size"] ?? "0") ?? 0,
                              modified: stamp.flatMap { fmt.date(from: $0) }))
         }
+        // Chinese Windows zips store GBK names without the UTF-8 flag, so 7-Zip shows mojibake.
+        // Restore them for display AND remember what 7-Zip itself calls each entry: every
+        // operation must hand 7-Zip its own (broken) spelling — it matches names exactly.
+        if archive.pathExtension.lowercased() == "zip",
+           let corrected = LegacyZipNames.correctedNames(in: archive),
+           corrected.count == out.count {
+            var map: [String: String] = [:]
+            var fixed: [Entry] = []
+            fixed.reserveCapacity(out.count)
+            for i in out.indices {
+                let e = out[i]
+                map[corrected[i]] = e.path          // Entry.path is a let: rebuild, not mutate
+                fixed.append(Entry(path: corrected[i], isDirectory: e.isDirectory,
+                                   size: e.size, packed: e.packed, modified: e.modified))
+            }
+            out = fixed
+            LegacyNameMap.store(map, for: archive)
+            appLog.notice("legacy zip names restored: \(map.count, privacy: .public)")
+        }
         appLog.notice("archive list \(archive.lastPathComponent, privacy: .public): \(out.count, privacy: .public) 条")
         return out
     }
@@ -390,7 +409,10 @@ enum ArchiveEngine {
         // "Multiple instances for switch", i.e. any file whose name starts with "-"
         // becomes impossible to extract.
         if !paths.isEmpty { args.append("--") }
-        args.append(contentsOf: paths)
+        // Recovered (GBK) names must be translated back: 7-Zip matches exactly.
+        if archive.pathExtension.lowercased() == "zip" { _ = entries(in: archive) }
+        let operands = paths.map { LegacyNameMap.engineName($0, in: archive) }
+        args.append(contentsOf: operands)
         let track = progressTracker(entries: entries(in: archive), selecting: paths, onProgress: onProgress)
         return run(z, args, onLine: { l in onLine?(l); track(l) }, onProgress: nil)
     }
@@ -453,7 +475,10 @@ enum ArchiveEngine {
         // single delete removed 2 files, with it exactly 1. extractEntries already passes -spd.
         var args = ["d", "-bsp1", "-spd", archive.path]
         if !paths.isEmpty { args.append("--") }   // see extractEntries: entry names are data, not switches
-        args.append(contentsOf: paths)
+        // Recovered (GBK) names must be translated back: 7-Zip matches exactly.
+        if archive.pathExtension.lowercased() == "zip" { _ = entries(in: archive) }
+        let operands = paths.map { LegacyNameMap.engineName($0, in: archive) }
+        args.append(contentsOf: operands)
         appLog.notice("7z delete \(archive.lastPathComponent, privacy: .public): \(paths.count, privacy: .public) 条")
         return run(z, args, onLine: onLine, onProgress: onProgress)
     }
@@ -492,5 +517,25 @@ enum ArchiveEngine {
         } catch {
             return Result(output: "删除失败：\(error.localizedDescription)", status: 1)
         }
+    }
+}
+
+
+/// Display name → the name 7-Zip printed, per archive. Filled in by `entries(in:)` after a
+/// GBK legacy zip has had its filenames recovered; empty for everything else, so the lookup
+/// is a no-op on normal archives.
+enum LegacyNameMap {
+    private static let lock = NSLock()
+    private static var maps: [String: [String: String]] = [:]
+
+    static func store(_ map: [String: String], for archive: URL) {
+        lock.lock(); maps[archive.path] = map; lock.unlock()
+    }
+
+    /// Translate a recovered (displayed) name back to the operand 7-Zip understands.
+    /// Anything unmapped passes through untouched.
+    static func engineName(_ displayPath: String, in archive: URL) -> String {
+        lock.lock(); let m = maps[archive.path]; lock.unlock()
+        return m?[displayPath] ?? displayPath
     }
 }
