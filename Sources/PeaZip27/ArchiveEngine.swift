@@ -134,6 +134,14 @@ enum ArchiveEngine {
         // realistic path there. macOS default action for SIGPIPE is process termination.
         signal(SIGPIPE, SIG_IGN)
 
+        // Trace the exact argv when diagnosing (PEAZIP_TRACE_ARGV=1): the GBK name pairing
+        // hinges on byte-exact strings, and printing them beats guessing.
+        if ProcessInfo.processInfo.environment["PEAZIP_TRACE_ARGV"] != nil {
+            for (i, a) in arguments.enumerated() {
+                let hex = Array(a.utf8).map { String(format: "%02x", $0) }.joined()
+                print("  argv[\(i)] hex=\(hex)")
+            }
+        }
         do { try p.run() } catch {
             pipe.fileHandleForReading.readabilityHandler = nil
             return Result(output: "无法启动 \(tool.path)：\(error.localizedDescription)", status: -1)
@@ -357,6 +365,24 @@ enum ArchiveEngine {
     }
 
     /// Entry paths exactly as 7-Zip prints them (the archive's own record is skipped).
+    /// Diagnostic for the GBK name pairing: prints the displayed name next to the one 7-Zip
+    /// itself uses, byte for byte. Kept because this pairing was wrong twice and guessing
+    /// cost more than the print does.
+    static func debugLegacyNames(_ archive: URL) {
+        guard let corrected = LegacyZipNames.correctedNames(in: archive) else {
+            print("  no correction needed"); return
+        }
+        let raw = rawEntryPaths(in: archive)
+        print("  display=부터\(corrected.count)  engine=\(raw.count)")
+        for (i, c) in corrected.enumerated() {
+            let r = i < raw.count ? raw[i] : "<missing>"
+            print("  [\(i)] display = \(c)")
+            print("       engine  = \(r.debugDescription)")
+            print("       bytes   = \(Array(r.utf8).map { String(format: "%02x", $0) }.joined())")
+            print("       match   = \(c == r ? "same" : "DIFFERENT")")
+        }
+    }
+
     private static func rawEntryPaths(in archive: URL) -> [String] {
         guard let z = sevenZip else { return [] }
         let r = run(z, ["l", "-slt", archive.path], onLine: nil, onProgress: nil)

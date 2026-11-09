@@ -210,6 +210,11 @@ struct PeaZip27App: App {
         if CommandLine.arguments.contains("--engine-update") { EngineUpdater.headless(forceInstall: true) }
         // Archive browsing, verifiable without clicking: --list <archive>
         // Extraction destination, verifiable without clicking: --extract-test <archive>
+        if let i = CommandLine.arguments.firstIndex(of: "--debug-operands"),
+           i + 1 < CommandLine.arguments.count {
+            ArchiveEngine.debugLegacyNames(URL(fileURLWithPath: CommandLine.arguments[i + 1]))
+            exit(0)
+        }
         if let i = CommandLine.arguments.firstIndex(of: "--zipnames"),
            i + 1 < CommandLine.arguments.count {
             let url = URL(fileURLWithPath: CommandLine.arguments[i + 1])

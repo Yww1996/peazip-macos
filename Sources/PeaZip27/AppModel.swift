@@ -137,6 +137,11 @@ final class AppModel: ObservableObject {
     @Published var items: [FileItem] = []
     @Published var selection: Set<URL> = []
     @Published var backStack: [URL] = []
+    /// Bumped by every listing request. A result is published only if it is still the newest:
+    /// path equality alone cannot tell two loads of the SAME path apart, so a slow older
+    /// listing could overwrite a fresher one (exactly what happens right after deleting
+    /// entries — the stale list reappears). codex review #4.
+    private var listGeneration = 0
     @Published var forwardStack: [URL] = []
     @Published var ascending = true
     @Published var showHidden = false
@@ -251,6 +256,8 @@ final class AppModel: ObservableObject {
     }
 
     func loadArchiveEntries() {
+        listGeneration &+= 1
+        let generation = listGeneration
         guard let archive = openArchive else { return }
         let inner = archivePath
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -278,7 +285,8 @@ final class AppModel: ObservableObject {
             appLog.notice("archive level \(inner.isEmpty ? "(根目录)" : inner, privacy: .public) → \(items.count, privacy: .public) 项 / 共 \(entries.count, privacy: .public) 条\(blocked ? " · 疑被系统拦截" : "", privacy: .public)")
             DispatchQueue.main.async {
                 // Ignore a result that arrived after the user navigated elsewhere.
-                guard let self, self.openArchive == archive, self.archivePath == inner else { return }
+                guard let self, self.listGeneration == generation,
+                      self.openArchive == archive, self.archivePath == inner else { return }
                 if unreadable {
                     self.opSheet = OpSheet(
                         title: "这个压缩包读不出来",
