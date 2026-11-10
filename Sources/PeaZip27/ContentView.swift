@@ -556,7 +556,8 @@ struct StatusBar: View {
             Image(systemName: "leaf.fill").font(.system(size: 11)).foregroundStyle(.green)
         }
         .padding(.horizontal, 12).padding(.vertical, 5)
-        .background(.bar)
+        .background(Color(nsColor: .windowBackgroundColor))   // flat, not .bar: the material layers
+        // a noise dither over it, which reads as a skewed texture in the header band
     }
 }
 
