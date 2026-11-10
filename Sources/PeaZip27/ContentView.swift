@@ -35,6 +35,11 @@ struct ContentView: View {
             .navigationSubtitle(model.statusText)
         }
         .toolbar { toolbarContent }
+        // The unified window toolbar paints its background across the WHOLE window, including
+        // the strip above the sidebar, while the list starts to the right of the sidebar — so
+        // the band looked shifted left relative to the content below. Hiding the toolbar's own
+        // background lets the window/sidebar colours show through and the seam disappears.
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .inspector(isPresented: $showImagePreview) {
             ImagePreviewPane(item: previewItem, archive: model.openArchive,
                              selectionCount: model.selection.count)
