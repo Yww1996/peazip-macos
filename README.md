@@ -13,6 +13,9 @@
 
 ---
 
+> 界面改动前请先读 [DESIGN.md](DESIGN.md) —— 字号、间距、颜色语义与交互约定都在里面，
+> 规范本身要改必须单独提交并说明理由。
+
 ## 这是什么
 
 一个 **macOS 原生的 PeaZip 前端**。界面用 SwiftUI 从头写，压缩解压交给**随包分发的 7-Zip 26.02 引擎**，装好后就是 `/Applications/PeaZip.app`，直接替换掉原来的 Lazarus/LCL 版本。
