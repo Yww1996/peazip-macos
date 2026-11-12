@@ -216,6 +216,7 @@ SPARKLE_FRAMEWORK="$SPARKLE_DIST/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.
 [ -d "$SPARKLE_FRAMEWORK" ] || { echo "❌ 找不到 Sparkle.framework"; exit 1; }
 mkdir -p "$APP/Contents/Frameworks"
 ditto "$SPARKLE_FRAMEWORK" "$APP/Contents/Frameworks/Sparkle.framework"
+cp "$SPARKLE_DIST/LICENSE" "$APP/Contents/Resources/Sparkle-LICENSE.txt"
 /usr/libexec/PlistBuddy -c 'Merge assets/updates/Info.plist' "$APP/Contents/Info.plist"
 echo "  Sparkle 更新框架与签名公钥 ✅"
 
