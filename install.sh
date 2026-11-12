@@ -11,7 +11,10 @@ ORIG="/Applications/PeaZip.app"
 BACKUP="$HOME/Desktop/PeaZip-原版备份.app"
 
 echo "############ 1) 构建 ############"
-bash package.sh 2>&1 | grep -E "二进制一致|图标|引擎|签名校验|主窗口|❌" | sed 's/^/  /'
+if ! bash package.sh 2>&1 | grep -E "二进制一致|图标|引擎|签名校验|主窗口|❌" | sed 's/^/  /'; then
+  echo "❌ 打包或验证失败，保留当前安装。"
+  exit 1
+fi
 [ -d "$SRC" ] || { echo "❌ 没有 $SRC"; exit 1; }
 
 echo

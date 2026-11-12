@@ -91,7 +91,8 @@ struct SettingsView: View {
     @AppStorage(PrefKey.openAfterExtract) private var openAfterExtract = false
     @AppStorage(PrefKey.showHidden) private var showHidden = false
 
-    @StateObject private var updater = EngineUpdater()
+    @StateObject private var updater = EngineUpdater.shared
+    @ObservedObject private var appUpdater = AppUpdater.shared
     @State private var note = ""
 
     var body: some View {
@@ -202,6 +203,23 @@ struct SettingsView: View {
             Toggle("显示隐藏文件", isOn: $showHidden)
             Text("以 . 开头的文件与文件夹。")
                 .font(.caption).foregroundStyle(.secondary)
+
+            Section("应用更新") {
+                LabeledContent("当前版本") {
+                    Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")
+                        .monospacedDigit()
+                }
+                Toggle("自动检查新版本", isOn: Binding(
+                    get: { appUpdater.automaticallyChecksForUpdates },
+                    set: { appUpdater.setAutomaticChecks($0) }
+                ))
+                Button("检查应用更新…") { appUpdater.checkForUpdates() }
+                    .disabled(!appUpdater.canCheckForUpdates)
+                Text(appUpdater.waitingForTasks
+                     ? "更新已准备好，等待当前任务结束后安装并重启。"
+                     : "从 GitHub 获取 PeaZip 新版本，安装前会征求确认。")
+                    .font(.system(size: 11.5)).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .padding()

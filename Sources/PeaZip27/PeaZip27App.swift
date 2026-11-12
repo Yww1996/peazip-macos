@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        MainActor.assumeIsolated { AppUpdater.shared.start(model: Self.model) }
         NSApp.setActivationPolicy(.regular)
         // Watch for anything closing our windows: with "quit when the last window closes"
         // in place, an unexpected close silently kills the app seconds after launch.
@@ -456,6 +457,7 @@ struct PeaZip27App: App {
         WindowGroup(id: "main") {
             ContentView()
                 .environmentObject(model)
+                .onAppear { AppUpdater.shared.start(model: model) }
                 .frame(minWidth: 900, minHeight: 520)
         }
         .windowToolbarStyle(.unified(showsTitle: true))
@@ -466,6 +468,9 @@ struct PeaZip27App: App {
         // `applicationShouldTerminateAfterLastWindowClosed` that becomes an instant quit.
         .defaultLaunchBehavior(.presented)
         .commands {
+            CommandGroup(after: .appInfo) {
+                AppUpdateMenuItem()
+            }
             // macOS stores the Full Disk Access list in a SIP-protected database: an app
             // cannot add itself to it, it can only take the user straight to the pane.
             CommandGroup(replacing: .help) {

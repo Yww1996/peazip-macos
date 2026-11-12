@@ -16,6 +16,7 @@ import os
 /// codesign, and those block. Only the two methods that touch published UI state are
 /// main-actor bound, so the blocking work can be pushed off the main thread.
 final class EngineUpdater: ObservableObject {
+    static let shared = EngineUpdater()
 
     enum State: Equatable {
         case idle

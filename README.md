@@ -6,7 +6,7 @@
 
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-1B2534?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6.4-2C7BEA?style=flat-square)
-![version 0.40](https://img.shields.io/badge/version-0.40-0B4FC0?style=flat-square)
+![version 0.41](https://img.shields.io/badge/version-0.41-0B4FC0?style=flat-square)
 ![license MIT](https://img.shields.io/badge/license-MIT-4C8C4A?style=flat-square)
 
 </div>
@@ -45,10 +45,15 @@
 | **受保护位置自动处理** | 微信 / QQ 等应用文件夹系统禁止写入 —— 自动改到 `~/Downloads` 并说明原因，而不是抛一个 `status=2` |
 | **排除规则** | macOS 垃圾文件、隐藏文件（默认开）、Windows 冗余文件、自定义通配符 |
 | **引擎自更新** | 从 PeaZip 官方发布版拉取并替换内置引擎，先验后用、失败回滚 |
+| **应用自动更新** | 从本仓库 GitHub Releases 获取新版，通过 Sparkle 校验签名、下载并安装；设置 → 通用可关闭自动检查，PeaZip 菜单可手动检查 |
 | **完整中文界面** | 包括标准菜单栏在内，`CFBundleDevelopmentRegion` + `.lproj` 落地 |
 | 其他 | 安全删除（多遍覆写）、格式转换、完整性测试、搜索、排序、隐藏文件开关 |
 
 ## 安装
+
+也可在 [Releases](https://github.com/Yww1996/peazip-macos/releases/latest) 下载 ZIP，解压后把 `PeaZip.app` 放入“应用程序”。0.40 及更早版本需要手动安装 0.41 一次，之后可通过软件内“检查应用更新…”更新。默认自动检查，安装前征求确认；归档或引擎更新期间会等待任务结束再重启。
+
+以下为从源码安装：
 
 需要 macOS 15+ 与 Swift 6 工具链。
 
@@ -78,6 +83,7 @@ Sources/PeaZip27/
   ArchiveEngine.swift      7z 封装：打包/解压/列目录/包内浏览/安全删除
   SettingsView.swift       设置窗口 6 个标签页
   EngineUpdater.swift      引擎版本检查与自更新
+  AppUpdater.swift         Sparkle 应用自动更新、任务结束后重启
 assets/
   AppIcon.icns             应用图标（画布 1024，主体 824，四边留白 100）
   ArchIcon.icns            压缩包文档图标

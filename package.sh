@@ -9,7 +9,7 @@
 #      windowless. Verification here polls on a substring both spellings share.
 # Window checks go through the window server (tools/winlist.swift): `screencapture` and
 # System Events both need permissions this environment does not have.
-set -uo pipefail
+set -euo pipefail
 cd "$(dirname "$0")"
 
 # Two bundles, two jobs.
@@ -27,7 +27,11 @@ PRODUCT="PeaZip27"
 EXE="PeaZip"
 
 echo "=== 0) 构建（必须是新二进制，否则后面所有验证都是假的）==="
-swift build -c release 2>&1 | tail -3 || { echo "❌ 构建失败"; exit 1; }
+if [ "${HEADLESS_PACKAGE:-0}" = 1 ]; then
+  swift build --disable-sandbox --build-system native -c release 2>&1 | tail -8
+else
+  swift build -c release 2>&1 | tail -8
+fi
 
 echo
 echo "=== 1) 组装 bundle ==="
@@ -94,17 +98,14 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key><string>PeaZip</string>
-    <!-- The dev build uses its own identity. With the SAME bundle id as the installed app,
-         macOS treats the second launch as a duplicate instance and terminates it — the dev
-         build died ~4s in, and it also competed for the default-handler registration and the
-         Finder services. install.sh rewrites this back to com.yww.pea27 when installing. -->
-    <key>CFBundleIdentifier</key><string>com.yww.pea27.dev</string>
+    <!-- The production identity must survive an in-app update. Only DEV is renamed. -->
+    <key>CFBundleIdentifier</key><string>com.yww.pea27</string>
     <key>CFBundleName</key><string>PeaZip</string>
     <key>CFBundleDisplayName</key><string>PeaZip</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.40</string>
-    <key>CFBundleVersion</key><string>40</string>
+    <key>CFBundleShortVersionString</key><string>0.41</string>
+    <key>CFBundleVersion</key><string>41</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <!-- Without CFBundleDevelopmentRegion, AppKit falls back to region "en" and renders
@@ -208,6 +209,16 @@ printf '/* App strings are written directly in code. */\n' \
 echo "  本地化目录: zh-Hans / zh-Hant / en"
 plutil -lint "$APP/Contents/Info.plist" >/dev/null && echo "  Info.plist 格式校验 ✅"
 
+# Sparkle is a dynamic framework: SwiftPM links it but does not embed it in our
+# hand-built bundle. ditto preserves the framework's symlinks and helper executables.
+SPARKLE_DIST="${SPARKLE_DISTRIBUTION:-.build/artifacts/sparkle/Sparkle}"
+SPARKLE_FRAMEWORK="$SPARKLE_DIST/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+[ -d "$SPARKLE_FRAMEWORK" ] || { echo "❌ 找不到 Sparkle.framework"; exit 1; }
+mkdir -p "$APP/Contents/Frameworks"
+ditto "$SPARKLE_FRAMEWORK" "$APP/Contents/Frameworks/Sparkle.framework"
+/usr/libexec/PlistBuddy -c 'Merge assets/updates/Info.plist' "$APP/Contents/Info.plist"
+echo "  Sparkle 更新框架与签名公钥 ✅"
+
 echo
 echo "=== 2) 清 bundle 根目录杂物（否则签名会被拒）==="
 find "$APP" -maxdepth 1 \( -type l -o -name '.DS_Store' \) -delete
@@ -223,7 +234,13 @@ rm -rf "$DEV"; cp -R "$APP" "$DEV"
 codesign --force --deep --sign - "$DEV" >/dev/null 2>&1 || true
 
 codesign --force --deep --sign - "$APP" || { echo "❌ 签名失败"; exit 1; }
-if codesign -v "$APP" 2>/dev/null; then echo "  ✅ 签名校验通过"; else echo "❌ 签名校验未通过"; exit 1; fi
+if codesign --verify --deep --strict "$APP" 2>/dev/null; then echo "  ✅ 签名校验通过"; else echo "❌ 签名校验未通过"; exit 1; fi
+
+# CI/release packaging does not launch GUI apps or terminate an installed app.
+if [ "${HEADLESS_PACKAGE:-0}" = 1 ]; then
+  "$APP/Contents/MacOS/$EXE" --selftest
+  exit 0
+fi
 
 echo
 echo "=== 4) 启动 ==="
@@ -240,7 +257,7 @@ open "$DEV"
 PID=""
 for _ in $(seq 1 24); do
   sleep 0.5
-  PID=$(pgrep -f "Contents/MacOS/$EXE" | head -1)
+  PID=$(pgrep -f "Contents/MacOS/$EXE" | head -1 || true)
   [ -n "$PID" ] && break
 done
 echo "  PID: ${PID:-未启动}"
@@ -255,7 +272,7 @@ for _ in $(seq 1 24); do
   # so pick the largest by area rather than the first line — otherwise this reports a
   # nonsense size for a perfectly good window.
   FOUND=$(swift tools/winlist.swift PeaZip --all 2>/dev/null | grep -i "owner=PeaZip" \
-          | grep -oE '[0-9]+x[0-9]+' | awk -Fx '{print $1*$2, $0}' | sort -rn | head -1 | cut -d' ' -f2-)
+          | grep -oE '[0-9]+x[0-9]+' | awk -Fx '{print $1*$2, $0}' | sort -rn | head -1 | cut -d' ' -f2- || true)
   [ -n "$FOUND" ] && break
 done
 if [ -n "$FOUND" ]; then
