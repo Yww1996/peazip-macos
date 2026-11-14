@@ -45,6 +45,16 @@ SPARKLE_PRIVATE_KEY_FILE="$PWD/.update-signing/ed25519.private-key" \
 ZIP 与 feed 都经 Ed25519 签名。脚本还会用 app 内嵌公钥独立验签，
 避免误用另一把私钥发布一个用户无法安装的版本。
 
+框架顶层链接会在签名前由 `normalize-framework-links.sh` 从
+`Versions/Current/...` 改为直接指向实际版本目录（如 `Versions/B/...`），
+避免 7z 的“经另一链接访问目标”保护拦截安装包中的链式链接。
+发布脚本会用内置 7z 重新解压 ZIP，并再次验证助手和整个 app 的代码签名。
+不要通过关闭 7z 的链接安全检查来处理此问题。
+
+Feed 保留 `<sparkle:informationalUpdate><sparkle:belowVersion>44`：
+41–43 的检查更新只提供手动下载入口，避免调用这些版本中可能已经损坏的助手。
+44 及以后继续正常应用内下载安装。后续发布不要删除这个旧版恢复规则。
+
 3. 将 ZIP、appcast.xml、SHA256SUMS 上传至同一个 GitHub Release，设为最新稳定版。
    标签必须是 `v显示版本`（例如 `v0.41`），以匹配 appcast 中的下载地址。
    可以先创建草稿进行检查，检查后再发布：

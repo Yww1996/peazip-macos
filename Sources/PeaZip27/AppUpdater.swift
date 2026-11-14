@@ -8,7 +8,7 @@ struct AppUpdateMenuItem: View {
 
     var body: some View {
         Button("检查应用更新…") { updater.checkForUpdates() }
-            .disabled(!updater.canCheckForUpdates)
+            .disabled(!updater.canCheckForUpdates && updater.installationProblem == nil)
     }
 }
 
@@ -41,6 +41,7 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
     @Published private(set) var canCheckForUpdates = false
     @Published private(set) var automaticallyChecksForUpdates = true
     @Published private(set) var waitingForTasks = false
+    @Published private(set) var installationProblem: String?
 
     private var controller: SPUStandardUpdaterController!
     private var observations = Set<AnyCancellable>()
@@ -76,13 +77,37 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
                 .store(in: &observations)
         }
         guard !started else { return }
+        installationProblem = UpdateInstallationHealth.problem(in: Bundle(for: SPUUpdater.self).bundleURL)
+        guard installationProblem == nil else { return }
         started = true
         controller.startUpdater()
     }
 
     func checkForUpdates() {
+        installationProblem = UpdateInstallationHealth.problem(in: Bundle(for: SPUUpdater.self).bundleURL)
+        if let installationProblem {
+            let alert = NSAlert()
+            alert.messageText = "自动更新暂不可用"
+            alert.informativeText = installationProblem
+            alert.addButton(withTitle: "下载完整安装包")
+            alert.addButton(withTitle: "取消")
+            if alert.runModal() == .alertFirstButtonReturn {
+                NSWorkspace.shared.open(URL(string: "https://github.com/Yww1996/peazip-macos/releases/latest")!)
+            }
+            return
+        }
+        if !started { start(model: AppDelegate.model) }
         guard canCheckForUpdates else { return }
         controller.checkForUpdates(nil)
+    }
+
+    func updater(_ updater: SPUUpdater, shouldProceedWithUpdate updateItem: SUAppcastItem,
+                 updateCheck: SPUUpdateCheck) throws {
+        if let problem = UpdateInstallationHealth.problem(in: Bundle(for: SPUUpdater.self).bundleURL) {
+            installationProblem = problem
+            throw NSError(domain: "com.yww.pea27.update", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: problem])
+        }
     }
 
     func setAutomaticChecks(_ enabled: Bool) {

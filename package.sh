@@ -104,8 +104,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key><string>PeaZip</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.43</string>
-    <key>CFBundleVersion</key><string>43</string>
+    <key>CFBundleShortVersionString</key><string>0.44</string>
+    <key>CFBundleVersion</key><string>44</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <!-- Without CFBundleDevelopmentRegion, AppKit falls back to region "en" and renders
@@ -216,6 +216,7 @@ SPARKLE_FRAMEWORK="$SPARKLE_DIST/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.
 [ -d "$SPARKLE_FRAMEWORK" ] || { echo "❌ 找不到 Sparkle.framework"; exit 1; }
 mkdir -p "$APP/Contents/Frameworks"
 ditto "$SPARKLE_FRAMEWORK" "$APP/Contents/Frameworks/Sparkle.framework"
+bash tools/normalize-framework-links.sh "$APP/Contents/Frameworks/Sparkle.framework"
 cp "$SPARKLE_DIST/LICENSE" "$APP/Contents/Resources/Sparkle-LICENSE.txt"
 /usr/libexec/PlistBuddy -c 'Merge assets/updates/Info.plist' "$APP/Contents/Info.plist"
 echo "  Sparkle 更新框架与签名公钥 ✅"

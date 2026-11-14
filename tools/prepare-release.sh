@@ -22,6 +22,7 @@ mkdir -p "$OUT"
 ZIP="$OUT/PeaZip-$VERSION.zip"
 rm -f "$ZIP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+bash tools/verify-release-extraction.sh "$APP" "$ZIP"
 SIGNATURE=$("$SIGN" "${KEY_ARGS[@]}" -p "$ZIP")
 LENGTH=$(stat -f %z "$ZIP")
 swift tools/verify-update.swift "$ZIP" "$SIGNATURE" "$APP/Contents/Info.plist" "$LENGTH"
@@ -48,6 +49,11 @@ ET.SubElement(item, 'pubDate').text = format_datetime(datetime.now(timezone.utc)
 ET.SubElement(item, f'{{{sparkle}}}version').text = build
 ET.SubElement(item, f'{{{sparkle}}}shortVersionString').text = version
 ET.SubElement(item, f'{{{sparkle}}}minimumSystemVersion').text = '15.0'
+# 41–43 may have been extracted with blocked helper symlinks. Their updater must
+# open the manual download link instead of running that potentially broken helper.
+# Keep this cutoff in future feeds: builds 44+ retain normal in-app installation.
+informational = ET.SubElement(item, f'{{{sparkle}}}informationalUpdate')
+ET.SubElement(informational, f'{{{sparkle}}}belowVersion').text = '44'
 ET.SubElement(item, 'link').text = f'https://github.com/Yww1996/peazip-macos/releases/tag/v{version}'
 notes = Path('assets/updates/release-notes.md').read_text()
 ET.SubElement(item, 'description').text = '<pre>' + escape(notes) + '</pre>'

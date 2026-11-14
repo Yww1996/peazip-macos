@@ -214,10 +214,10 @@ struct SettingsView: View {
                     set: { appUpdater.setAutomaticChecks($0) }
                 ))
                 Button("检查应用更新…") { appUpdater.checkForUpdates() }
-                    .disabled(!appUpdater.canCheckForUpdates)
-                Text(appUpdater.waitingForTasks
+                    .disabled(!appUpdater.canCheckForUpdates && appUpdater.installationProblem == nil)
+                Text(appUpdater.installationProblem ?? (appUpdater.waitingForTasks
                      ? "更新已准备好，等待当前任务结束后安装并重启。"
-                     : "从 GitHub 获取 PeaZip 新版本，安装前会征求确认。")
+                     : "从 GitHub 获取 PeaZip 新版本，安装前会征求确认。"))
                     .font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
         }
