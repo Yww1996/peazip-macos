@@ -460,7 +460,7 @@ struct PeaZip27App: App {
                 .onAppear { AppUpdater.shared.start(model: model) }
                 .frame(minWidth: 900, minHeight: 520)
         }
-        .windowToolbarStyle(.unified(showsTitle: true))
+        // WindowTabLayout chooses unified/expanded chrome for each native tab group.
         .defaultSize(width: 1120, height: 700)
         // Do not depend on AppKit's saved-window-state path to produce the launch window.
         // When that path restores nothing (stale state, or a changed WindowGroup id) the

@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var sidebarSel: URL?
     @State private var query = ""
     @State private var sortOrder = [KeyPathComparator(\FileItem.name)]
+    @State private var windowTabBarVisible = false
     @AppStorage("showImagePreview") private var showImagePreview = true
 
     var body: some View {
@@ -35,11 +36,10 @@ struct ContentView: View {
             .navigationSubtitle(model.statusText)
         }
         .toolbar { toolbarContent }
-        // The unified window toolbar paints its background across the WHOLE window, including
-        // the strip above the sidebar, while the list starts to the right of the sidebar — so
-        // the band looked shifted left relative to the content below. Hiding the toolbar's own
-        // background lets the window/sidebar colours show through and the seam disappears.
-        .toolbarBackground(.hidden, for: .windowToolbar)
+        // A single window keeps the seamless unified toolbar. Native window tabs need
+        // AppKit's standard chrome instead of the split view's transparent toolbar layout.
+        .toolbarBackground(windowTabBarVisible ? .visible : .hidden, for: .windowToolbar)
+        .background(WindowTabLayout(tabBarVisible: $windowTabBarVisible).frame(width: 0, height: 0))
         .inspector(isPresented: $showImagePreview) {
             ImagePreviewPane(item: previewItem, archive: model.openArchive,
                              selectionCount: model.selection.count)
