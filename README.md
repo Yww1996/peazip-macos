@@ -6,7 +6,7 @@
 
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-1B2534?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6.4-2C7BEA?style=flat-square)
-![version 0.41](https://img.shields.io/badge/version-0.41-0B4FC0?style=flat-square)
+![version 0.42](https://img.shields.io/badge/version-0.42-0B4FC0?style=flat-square)
 ![license MIT](https://img.shields.io/badge/license-MIT-4C8C4A?style=flat-square)
 
 </div>

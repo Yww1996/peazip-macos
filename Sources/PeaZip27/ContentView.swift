@@ -457,7 +457,11 @@ struct SidebarView: View {
                 // Identified by URL, not by array offset: an offset changes whenever the
                 // list shifts, so SwiftUI rebuilds the rows and the selection is lost.
                 ForEach(Array(model.backStack.suffix(6).reversed()), id: \.self) { u in
-                    Label(u.lastPathComponent.isEmpty ? "/" : u.lastPathComponent, systemImage: "clock")
+                    Label {
+                        Text(u.lastPathComponent.isEmpty ? "/" : u.lastPathComponent)
+                    } icon: {
+                        SidebarLocationIcon(url: u, fallbackSymbol: "folder")
+                    }
                         .lineLimit(1)
                         .tag(u)
                 }
@@ -467,7 +471,46 @@ struct SidebarView: View {
     }
 
     private func row(_ p: Place) -> some View {
-        Label(p.name, systemImage: p.symbol).tag(p.url)
+        Label {
+            Text(p.name)
+        } icon: {
+            SidebarLocationIcon(url: p.url, fallbackSymbol: p.symbol)
+        }
+        .tag(p.url)
+    }
+}
+
+/// Ask macOS for the same folder/volume artwork used by Finder. Icon lookup may
+/// touch a protected folder or a mounted share, so keep it out of the UI thread.
+private struct SidebarLocationIcon: View {
+    let url: URL
+    let fallbackSymbol: String
+    @State private var icon: NSImage?
+
+    var body: some View {
+        Group {
+            if let icon {
+                Image(nsImage: icon)
+                    .renderingMode(.original)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+            } else {
+                Image(systemName: fallbackSymbol)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(width: 16, height: 16)
+        .accessibilityHidden(true)
+        .task(id: url) {
+            icon = nil
+            let location = url
+            let loaded = await Task.detached(priority: .utility) {
+                NSWorkspace.shared.icon(forFile: location.path)
+            }.value
+            guard !Task.isCancelled else { return }
+            icon = loaded
+        }
     }
 }
 
