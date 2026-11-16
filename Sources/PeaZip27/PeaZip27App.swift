@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static var backgroundOnly = true
     static var terminateAfterServices = false
     private static var windowRequestPending = false
+    static var mainWindowOpener: (@MainActor () -> Void)?
 
     func applicationShouldRestoreApplicationState(_ app: NSApplication) -> Bool { false }
     func applicationShouldSaveApplicationState(_ app: NSApplication) -> Bool { false }
@@ -174,7 +175,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             appLog.notice("没有可用窗口 —— 触发「打开主窗口」")
-            _ = openMainWindowViaMenu()
+            if let open = Self.mainWindowOpener { open() }
+            else { _ = openMainWindowViaMenu() }
         }
     }
 
@@ -514,6 +516,9 @@ struct PeaZip27App: App {
     }
 
     var body: some Scene {
+        // Register even with no windows: the command menu need not be materialized
+        // yet when a normal launch requests its first, explicitly suppressed scene.
+        let _ = { AppDelegate.mainWindowOpener = { openWindow(id: "main") } }()
         WindowGroup(id: "main") {
             ContentView()
                 .environmentObject(model)
