@@ -104,8 +104,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key><string>PeaZip</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.44</string>
-    <key>CFBundleVersion</key><string>44</string>
+    <key>CFBundleShortVersionString</key><string>0.45</string>
+    <key>CFBundleVersion</key><string>45</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <!-- Without CFBundleDevelopmentRegion, AppKit falls back to region "en" and renders
@@ -144,6 +144,15 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
             <key>NSMenuItem</key>
             <dict><key>default</key><string>用 PeaZip 解压到新文件夹</string></dict>
             <key>NSMessage</key><string>peaExtract</string>
+            <key>NSPortName</key><string>PeaZip</string>
+            <key>NSRequiredContext</key>
+            <dict><key>NSTextContent</key><string>FilePath</string></dict>
+            <key>NSSendTypes</key><array><string>NSFilenamesPboardType</string></array>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict><key>default</key><string>用 PeaZip 解压到桌面</string></dict>
+            <key>NSMessage</key><string>peaExtractDesktop</string>
             <key>NSPortName</key><string>PeaZip</string>
             <key>NSRequiredContext</key>
             <dict><key>NSTextContent</key><string>FilePath</string></dict>

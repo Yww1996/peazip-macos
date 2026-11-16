@@ -73,6 +73,13 @@ feed 固定为 `https://github.com/Yww1996/peazip-macos/releases/latest/download
 
 ## 验证与当前分发限制
 
+访达解压服务：`swift test` 覆盖桌面、源目录、批量解压、内容校验及同名保护。
+有完整 macOS 图形会话时，可在 `swift test` 和 `package.sh` 后运行
+`python3 tools/service_launch_test.py`，验证普通启动、服务冷启动及已有窗口时的解压。
+测试使用独立 bundle id、测试目录和 Debug 构建，不操作 /Applications 或真实桌面；
+所有测试环境开关均通过 `#if DEBUG` 排除在发布版外。
+无可用图形会话时，GUI 测试应报告受限，不能算作通过。
+
 测试包含任务忙碌时延迟安装、任务结束后只恢复一次，以及后续任务再次延迟。
 发布脚本包含归档往返自检、包内公钥验签、feed 验签。
 `HEADLESS_PACKAGE=1 bash package.sh` 可用于没有图形会话的打包环境，

@@ -5,8 +5,8 @@ import PackageDescription
 // swiftSettings entry is needed (swiftLanguageMode requires PackageDescription 6.0).
 let package = Package(
     name: "PeaZip27",
-    // macOS 15 is required for `Scene.defaultLaunchBehavior`, which is what guarantees a
-    // launch window instead of leaving it to AppKit's saved-state path.
+    // macOS 15 is required for `Scene.defaultLaunchBehavior`: Finder extraction can
+    // start without windows, while AppDelegate explicitly handles normal UI launches.
     // Written as a version string because PackageDescription 5.9 has no `.v15` case, and
     // raising swift-tools-version to 6.0 would switch the language mode to Swift 6.
     platforms: [.macOS("15.0")],

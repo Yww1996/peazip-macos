@@ -65,12 +65,14 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
         // Bind when the main view appears as well, without starting a second updater.
         if !observingTasks, let model {
             observingTasks = true
-            relaunchGate.setBusy(model.busy || EngineUpdater.shared.state.isWorking)
-            Publishers.CombineLatest(model.$busy, EngineUpdater.shared.$state)
+            relaunchGate.setBusy(model.busy || EngineUpdater.shared.state.isWorking
+                                || FinderExtractionService.shared.pendingCount > 0)
+            Publishers.CombineLatest3(model.$busy, EngineUpdater.shared.$state,
+                                      FinderExtractionService.shared.$pendingCount)
                 .receive(on: DispatchQueue.main)
-                .sink { [weak self] busy, engineState in
+                .sink { [weak self] busy, engineState, serviceCount in
                     guard let self else { return }
-                    let working = busy || engineState.isWorking
+                    let working = busy || engineState.isWorking || serviceCount > 0
                     if !working { self.waitingForTasks = false }
                     self.relaunchGate.setBusy(working)
                 }

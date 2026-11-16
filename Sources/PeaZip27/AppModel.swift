@@ -185,6 +185,9 @@ final class AppModel: ObservableObject {
             appLog.notice("flushing \(pending.count, privacy: .public) 个启动时待打开的 URL")
             openFromFinder(pending)
         }
+        let services = AppDelegate.pendingServices
+        AppDelegate.pendingServices.removeAll()
+        for service in services { service(self) }
     }
 
     /// Entry point for files opened from Finder (double-click / "Open With").
@@ -606,34 +609,6 @@ final class AppModel: ObservableObject {
                               level: Prefs.compressionLevel,
                               exclusions: Prefs.exclusionPatterns,
                               onLine: line, onProgress: progress)
-        }
-    }
-
-    /// Extract each archive into a sibling folder named after it — never into the
-    /// current directory, so a right-click cannot silently scatter files around.
-    func extractFromService(_ urls: [URL]) {
-        let archives = Self.existing(urls).filter {
-            FileItem.archiveExtensions.contains($0.pathExtension.lowercased())
-        }
-        guard !archives.isEmpty else {
-            opSheet = OpSheet(title: "解压", detail: "选中的项目里没有压缩包")
-            return
-        }
-        openFromFinder(archives)
-        let (firstRoot, note) = Self.writableRoot(for: archives[0])
-        let firstDest = firstRoot
-            .appendingPathComponent(archives[0].deletingPathExtension().lastPathComponent)
-        run(title: "解压 \(archives.count) 个压缩包",
-            note: note,
-            reveal: Prefs.openAfterExtract ? firstDest : nil) { line, progress in
-            var last = ArchiveEngine.Result(output: "", status: 0)
-            for a in archives {
-                let dest = Self.writableRoot(for: a).url
-                    .appendingPathComponent(a.deletingPathExtension().lastPathComponent)
-                last = ArchiveEngine.extract(a, to: dest, onLine: line, onProgress: progress)
-                if !last.ok { break }
-            }
-            return last
         }
     }
 

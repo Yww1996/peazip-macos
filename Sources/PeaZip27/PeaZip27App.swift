@@ -22,6 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// archive delivers `application(_:open:)` during launch, when `model` is still nil —
     /// without buffering, that first open is silently dropped.
     static var pendingOpen: [URL] = []
+    static var pendingServices: [@MainActor (AppModel) -> Void] = []
+    static var backgroundOnly = true
+    static var terminateAfterServices = false
+    private static var windowRequestPending = false
 
     func applicationShouldRestoreApplicationState(_ app: NSApplication) -> Bool { false }
     func applicationShouldSaveApplicationState(_ app: NSApplication) -> Bool { false }
@@ -32,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // consulted early enough — AppKit's reopen path still runs and can produce NO
         // window at all. Deleting the state before it is read is deterministic.
         Self.clearSavedState()
+        NSApp.servicesProvider = self
+        NSApp.setActivationPolicy(.accessory)
     }
 
     private static func clearSavedState() {
@@ -47,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Called on the main thread, hence assumeIsolated.
     func application(_ application: NSApplication, open urls: [URL]) {
         MainActor.assumeIsolated {
-            NSApp.activate(ignoringOtherApps: true)
+            Self.requestMainWindow()
             guard let model = Self.model else {
                 Self.pendingOpen.append(contentsOf: urls)   // launch-time open
                 return
@@ -57,8 +63,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        MainActor.assumeIsolated { AppUpdater.shared.start(model: Self.model) }
-        NSApp.setActivationPolicy(.regular)
+        var normalLaunch = notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool ?? true
+        #if DEBUG
+        if let kind = ServiceLaunchProbe.kind { normalLaunch = kind != "service" }
+        #endif
+        if normalLaunch || !Self.backgroundOnly {
+            Self.requestMainWindow()
+            MainActor.assumeIsolated { AppUpdater.shared.start(model: Self.model) }
+        }
         // Watch for anything closing our windows: with "quit when the last window closes"
         // in place, an unexpected close silently kills the app seconds after launch.
         NotificationCenter.default.addObserver(
@@ -84,8 +96,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // NSMessage values declared in Info.plist's NSServices array.
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
+        #if DEBUG
+        ServiceLaunchProbe.started(provider: self)
+        #endif
+    }
+
+    private static func requestMainWindow() {
+        backgroundOnly = false
+        terminateAfterServices = false
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        Self.ensureWindowAppears()
+        if !windowRequestPending {
+            windowRequestPending = true
+            ensureWindowAppears()
+        }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        Self.requestMainWindow()
+        return true
+    }
+
+    @MainActor
+    static func finishBackgroundServicesIfIdle() {
+        guard FinderExtractionService.shared.pendingCount == 0 else { return }
+        if backgroundOnly || terminateAfterServices {
+            #if DEBUG
+            ServiceLaunchProbe.finished()
+            #endif
+            NSApp.terminate(nil)
+        }
     }
 
     /// Nothing guarantees the launch window is actually presented. macOS remembers "this
@@ -98,6 +138,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// same path ⌘N uses.
     private static func ensureWindowAppears() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            Self.windowRequestPending = false
+            guard !Self.backgroundOnly else { return }
             let all = NSApp.windows
             let inventory = all.map {
                 let t = $0.title.isEmpty ? "(无题)" : $0.title
@@ -155,7 +197,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// a live process with no window and no obvious way back to one — which is exactly
     /// what happened while File ▸ New Window was replaced with an empty command group.
     /// A Service invocation simply relaunches the app.
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        MainActor.assumeIsolated {
+            if FinderExtractionService.shared.pendingCount > 0 {
+                Self.terminateAfterServices = true
+                return false
+            }
+            return true
+        }
+    }
 
     // MARK: - Finder services (Info.plist → NSServices)
 
@@ -169,9 +219,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let urls = serviceURLs(pboard)
         appLog.notice("service \(name, privacy: .public): \(urls.count, privacy: .public) 项")
         MainActor.assumeIsolated {
-            NSApp.activate(ignoringOtherApps: true)
-            guard let model = Self.model, !urls.isEmpty else { return }
-            action(model, urls)
+            guard !urls.isEmpty else { return }
+            Self.requestMainWindow()
+            if let model = Self.model { action(model, urls) }
+            else { Self.pendingServices.append { action($0, urls) } }
         }
     }
 
@@ -187,7 +238,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func peaExtract(_ pboard: NSPasteboard, userData: String,
                           error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        dispatch(pboard, name: "extract") { $0.extractFromService($1) }
+        MainActor.assumeIsolated {
+            FinderExtractionService.shared.extract(serviceURLs(pboard), destination: .besideArchive)
+        }
+    }
+
+    @objc func peaExtractDesktop(_ pboard: NSPasteboard, userData: String,
+                                error: AutoreleasingUnsafeMutablePointer<NSString>) {
+        MainActor.assumeIsolated {
+            FinderExtractionService.shared.extract(serviceURLs(pboard), destination: .desktop)
+        }
     }
 
     @objc func peaTest(_ pboard: NSPasteboard, userData: String,
@@ -462,11 +522,9 @@ struct PeaZip27App: App {
         }
         // WindowTabLayout chooses unified/expanded chrome for each native tab group.
         .defaultSize(width: 1120, height: 700)
-        // Do not depend on AppKit's saved-window-state path to produce the launch window.
-        // When that path restores nothing (stale state, or a changed WindowGroup id) the
-        // app presents no window at all — and combined with
-        // `applicationShouldTerminateAfterLastWindowClosed` that becomes an instant quit.
-        .defaultLaunchBehavior(.presented)
+        // AppDelegate explicitly opens the browser for normal/file launches. A Finder
+        // extraction service must be able to launch with zero windows from the start.
+        .defaultLaunchBehavior(.suppressed)
         .commands {
             CommandGroup(after: .appInfo) {
                 AppUpdateMenuItem()

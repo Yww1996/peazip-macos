@@ -230,7 +230,7 @@ struct SettingsView: View {
             LabeledContent("右键「服务」菜单") {
                 Button("打开系统服务设置") { openServiceSettings() }
             }
-            Text("勾选「用 PeaZip …」四项后，在访达里选中文件右键 → 服务 即可直接压缩/解压。")
+            Text("勾选「用 PeaZip …」五项后，在访达里选中文件右键 → 服务 即可直接压缩/解压。")
                 .font(.caption).foregroundStyle(.secondary)
 
             Divider()
