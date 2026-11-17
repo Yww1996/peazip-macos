@@ -316,6 +316,9 @@ enum ArchiveEngine {
     static func extract(_ archive: URL, to dir: URL,
                         onLine: ((String) -> Void)?,
                     onProgress: ((Int, String?) -> Void)? = nil) -> Result {
+        if let result = extractLegacyZIP(archive, paths: [], to: dir, onLine: onLine, onProgress: onProgress) {
+            return result
+        }
         guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         // -bb1, not -bsp1: the engine's own percentage never survives a pipe.
@@ -480,6 +483,9 @@ enum ArchiveEngine {
     static func extractEntries(_ archive: URL, paths: [String], to dir: URL,
                                onLine: ((String) -> Void)?,
                     onProgress: ((Int, String?) -> Void)? = nil) -> Result {
+        if let result = extractLegacyZIP(archive, paths: paths, to: dir, onLine: onLine, onProgress: onProgress) {
+            return result
+        }
         guard let z = sevenZip else { return Result(output: "找不到 7z 引擎", status: -1) }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var args = ["x", archive.path, "-o\(dir.path)", "-y", "-bb1", "-spd"]
@@ -494,6 +500,45 @@ enum ArchiveEngine {
         let res = run(z, args, onLine: { l in onLine?(l); track(l) }, onProgress: nil)
         if res.ok { renameLegacyOutput(in: dir, archive: archive) }
         return res
+    }
+
+    /// The bundled Unix 7z cannot apply CP936/GB18030 even with -mcp. Renaming
+    /// afterwards is too late: mojibake can exceed NAME_MAX before extraction ends.
+    /// macOS libarchive decodes legacy ZIP names before creating any filesystem item.
+    private static func extractLegacyZIP(_ archive: URL, paths: [String], to dir: URL,
+                                         onLine: ((String) -> Void)?,
+                                         onProgress: ((Int, String?) -> Void)?) -> Result? {
+        guard archive.pathExtension.lowercased() == "zip",
+              let names = LegacyZipNames.correctedNames(in: archive) else { return nil }
+        func safe(_ name: String) -> Bool {
+            let path = name.replacingOccurrences(of: "\\", with: "/")
+            return !path.hasPrefix("/") && !path.contains("\0")
+                && !path.split(separator: "/").contains("..")
+                && !(path.split(separator: "/").first?.hasSuffix(":") ?? false)
+        }
+        guard names.allSatisfy(safe), paths.allSatisfy(safe) else {
+            return Result(output: "压缩包包含不安全的文件路径，已停止解压。", status: 2)
+        }
+        guard LegacyZipNames.canExtractAsGB18030(archive) else { return nil }
+        do { try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+        catch { return Result(output: error.localizedDescription, status: 2) }
+        var args = ["-x", "-v", "-f", archive.path, "--options", "hdrcharset=GB18030", "-C", dir.path]
+        for path in paths {
+            // libarchive's include patterns match a directory and its descendants.
+            // Quote glob metacharacters so selecting 图[1].txt cannot extract 图1.txt.
+            let literal = path.reduce(into: "") { result, character in
+                if "\\*?[]".contains(character) { result.append("\\") }
+                result.append(character)
+            }
+            args += ["--include", literal]
+        }
+        let track = progressTracker(entries: entries(in: archive), selecting: paths, onProgress: onProgress)
+        let result = run(URL(fileURLWithPath: "/usr/bin/tar"), args, onLine: { line in
+            onLine?(line)
+            if line.hasPrefix("x ") { track("- " + line.dropFirst(2)) }
+        })
+        if result.ok { onProgress?(100, nil) }
+        return result
     }
 
     // MARK: - Editing an archive in place

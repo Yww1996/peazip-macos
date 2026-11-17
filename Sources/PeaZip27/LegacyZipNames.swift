@@ -17,6 +17,24 @@ enum LegacyZipNames {
     /// the CD in the same order. Pairing by name is impossible — the whole point is that
     /// 7-Zip's name is the broken one.
     static func correctedNames(in url: URL) -> [String]? {
+        guard let records = readNames(in: url), records.contains(where: \.legacy) else { return nil }
+        return records.map(\.name)
+    }
+
+    /// A global GB18030 reader must not reinterpret unflagged UTF-8 siblings.
+    /// Keep the existing per-entry recovery for these unusual mixed archives.
+    static func canExtractAsGB18030(_ url: URL) -> Bool {
+        guard let records = readNames(in: url) else { return false }
+        return !records.contains(where: \.unflaggedUTF8)
+    }
+
+    private struct NameRecord {
+        let name: String
+        let legacy: Bool
+        let unflaggedUTF8: Bool
+    }
+
+    private static func readNames(in url: URL) -> [NameRecord]? {
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
 
         // End of central directory: scan back over the (possibly long) archive comment.
@@ -31,8 +49,7 @@ enum LegacyZipNames {
 
         let count = Int(u16(data, eocd + 10))
         var off = Int(u32(data, eocd + 16))
-        var names: [String] = []
-        var corrected = false
+        var names: [NameRecord] = []
 
         for _ in 0..<count {
             guard off + 46 <= data.count, u32(data, off) == 0x0201_4B50 else { return nil }
@@ -44,18 +61,21 @@ enum LegacyZipNames {
             let raw = data.subdata(in: (off + 46)..<(off + 46 + nlen))
 
             let name: String
+            var legacy = false
+            var unflaggedUTF8 = false
             if flag & 0x800 != 0 {
                 name = String(data: raw, encoding: .utf8) ?? ""
             } else if let utf8 = String(data: raw, encoding: .utf8) {
                 name = utf8                       // unflagged, but genuinely UTF-8 already
+                unflaggedUTF8 = raw.contains { $0 >= 0x80 }
             } else {
                 name = decodeGB18030(raw)
-                corrected = true
+                legacy = true
             }
-            names.append(name)
+            names.append(NameRecord(name: name, legacy: legacy, unflaggedUTF8: unflaggedUTF8))
             off += 46 + nlen + xlen + clen
         }
-        return corrected ? names : nil
+        return names
     }
 
     /// CoreFoundation is the only Foundation route to GBK/GB18030.

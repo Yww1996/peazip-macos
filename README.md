@@ -6,7 +6,7 @@
 
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-1B2534?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6.4-2C7BEA?style=flat-square)
-![version 0.45](https://img.shields.io/badge/version-0.45-0B4FC0?style=flat-square)
+![version 0.46](https://img.shields.io/badge/version-0.46-0B4FC0?style=flat-square)
 ![license MIT](https://img.shields.io/badge/license-MIT-4C8C4A?style=flat-square)
 
 </div>
@@ -40,6 +40,7 @@
 | **压缩包内浏览** | 双击压缩包**进包看内容**（不再直接解压）；面包屑逐层进入，7z 的扁平列表被折叠成文件夹，大小按含子项聚合 |
 | **包内直接增删** | 不解压就能往包里加文件、删文件。ZIP / 7z / TAR 可写；**RAR 明确只读**并给出中文提示，而不是静默失败 |
 | **图片预览** | 主界面右侧预览选中的本地图片或压缩包内图片，显示像素尺寸与文件信息；可用工具栏按钮或 ⌥⌘P 收起/展开。多帧图片显示静态预览 |
+| **中文 ZIP 兼容** | Windows 中文编码 ZIP 在创建文件前正确解码名称，避免乱码和名称过长导致的解压失败；适用于主界面、拖出文件和访达后台解压 |
 | **拖拽** | 直接拖动文件名或图标到桌面 / 访达即可解压，支持多选和完整文件夹；双击仍可进入文件夹。使用 macOS 文件承诺机制，松开后提取并交付，保留中文文件名与子目录；拖进窗口 = 加入当前包 |
 | **访达右键服务** | 压缩为 ZIP、压缩为 7z、解压到新文件夹、解压到桌面、测试压缩包完整性，共 5 项。两个解压入口均后台执行，不弹主界面和进度窗，失败时才提示；同名文件夹自动另建，避免覆盖 |
 | **受保护位置自动处理** | 微信 / QQ 等应用文件夹系统禁止写入 —— 自动改到 `~/Downloads` 并说明原因，而不是抛一个 `status=2` |
