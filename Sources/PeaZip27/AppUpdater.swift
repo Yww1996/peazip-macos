@@ -94,7 +94,7 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
             alert.addButton(withTitle: "下载完整安装包")
             alert.addButton(withTitle: "取消")
             if alert.runModal() == .alertFirstButtonReturn {
-                NSWorkspace.shared.open(URL(string: "https://github.com/Yww1996/peazip-macos/releases/latest")!)
+                NSWorkspace.shared.open(URL(string: "https://github.com/Yww1996/zuno/releases/latest")!)
             }
             return
         }

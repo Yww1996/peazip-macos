@@ -22,8 +22,8 @@ echo "############ 1) 构建 + 安装 ############"
 bash install.sh 2>&1 | grep -vE "appintents|linkd|Re-initialization|xpc:connection|SignalReady|SIGNAL" \
   | grep -E "主窗口|❌"
 
-APP=/Applications/PeaZip.app
-BIN="$APP/Contents/MacOS/PeaZip"
+APP=/Applications/Zuno.app
+BIN="$APP/Contents/MacOS/Zuno"
 
 if [ -f "$ZIP" ]; then
   echo
@@ -33,10 +33,10 @@ fi
 
 echo
 echo "############ 3) 冷启动场景：app 没在跑时从访达打开压缩包 ############"
-osascript -e 'tell application "PeaZip" to quit' >/dev/null 2>&1 || true
-pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
+osascript -e 'tell application "Zuno" to quit' >/dev/null 2>&1 || true
+pkill -f "Contents/MacOS/Zuno" 2>/dev/null || true
 sleep 2
-pgrep -f "Contents/MacOS/PeaZip" >/dev/null && echo "  ⚠️ 仍有实例" || echo "  已全部退出 ✅"
+pgrep -f "Contents/MacOS/Zuno" >/dev/null && echo "  ⚠️ 仍有实例" || echo "  已全部退出 ✅"
 
 START=$(date '+%Y-%m-%d %H:%M:%S')
 open -a "$APP" "$ZIP"

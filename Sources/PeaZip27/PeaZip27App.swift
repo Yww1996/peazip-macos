@@ -317,7 +317,7 @@ struct PeaZip27App: App {
     /// path for formats 7-Zip cannot write (RAR being the one users actually hit).
     static func editTest(_ path: String) -> Never {
         let url = URL(fileURLWithPath: path)
-        print("PeaZip 压缩包编辑自检")
+        print("Zuno 压缩包编辑自检")
         print("  归档      : \(url.lastPathComponent)")
         guard FileManager.default.fileExists(atPath: url.path) else {
             print("  ❌ 文件不存在"); exit(1)
@@ -351,7 +351,7 @@ struct PeaZip27App: App {
     /// then descend one folder. Same `children(of:archive:under:)` the UI uses.
     static func listArchive(_ path: String) -> Never {
         let url = URL(fileURLWithPath: path)
-        print("PeaZip 压缩包浏览自检")
+        print("Zuno 压缩包浏览自检")
         print("  归档      : \(url.lastPathComponent)")
         let exists = FileManager.default.fileExists(atPath: url.path)
         print("  存在      : \(exists ? "✅" : "❌")")
@@ -359,7 +359,7 @@ struct PeaZip27App: App {
         // there: the system denies the stat itself. Say so, instead of "file not found".
         guard exists else {
             print("  ❌ 无法访问：文件不存在，或所在位置没有访问权限")
-            print("     若它位于微信 / QQ 等应用的文件夹，需要给 PeaZip 完全磁盘访问权限：")
+            print("     若它位于微信 / QQ 等应用的文件夹，需要给 Zuno 完全磁盘访问权限：")
             print("     系统设置 → 隐私与安全性 → 完全磁盘访问权限")
             exit(3)
         }
@@ -386,7 +386,7 @@ struct PeaZip27App: App {
         let bytes = (attrs?[.size] as? NSNumber)?.intValue ?? 0
         if entries.isEmpty && bytes > 4096 {
             print("  ⚠️ 读不到内容：文件有 \(bytes) 字节，但引擎返回 0 条 —— 位置受系统保护")
-            print("     需要给 PeaZip 完全磁盘访问权限：系统设置 → 隐私与安全性 → 完全磁盘访问权限")
+            print("     需要给 Zuno 完全磁盘访问权限：系统设置 → 隐私与安全性 → 完全磁盘访问权限")
             exit(3)
         }
 
@@ -412,7 +412,7 @@ struct PeaZip27App: App {
     /// makes and extracts for real, so "解压不了" is reproducible without clicking.
     static func extractTest(_ path: String) -> Never {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardizedFileURL
-        print("PeaZip 解压目标自检")
+        print("Zuno 解压目标自检")
         print("  压缩包    : \(url.lastPathComponent)")
         print("  所在目录  : \(url.deletingLastPathComponent().path)")
         let (root, note) = AppModel.writableRoot(for: url)
@@ -448,7 +448,7 @@ struct PeaZip27App: App {
     }
 
     static func selftest() -> Never {
-        print("PeaZip 自检")
+        print("Zuno 自检")
         print("  7z 引擎      : \(ArchiveEngine.sevenZip?.path ?? "❌ 未找到")")
         print("  引擎版本      : \(ArchiveEngine.version ?? "—")")
         print("  是否可用      : \(ArchiveEngine.isAvailable ? "✅" : "❌")")

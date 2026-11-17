@@ -9,7 +9,7 @@ if ! "$APP/Contents/Resources/bin/7z/7z" x "$ZIP" "-o$WORK" -y > "$WORK/extracti
   cat "$WORK/extraction.log" >&2
   exit 1
 fi
-EXTRACTED="$WORK/PeaZip.app"
+EXTRACTED="$WORK/$(basename "$APP")"
 FRAMEWORK="$EXTRACTED/Contents/Frameworks/Sparkle.framework"
 for TOOL in Sparkle Autoupdate Updater.app/Contents/MacOS/Updater; do
   [ -x "$FRAMEWORK/$TOOL" ] && [ -s "$FRAMEWORK/$TOOL" ]

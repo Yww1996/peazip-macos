@@ -299,7 +299,7 @@ final class AppModel: ObservableObject {
                 if blocked {
                     self.opSheet = OpSheet(
                         title: "读不到压缩包内容",
-                        detail: "\(archive.lastPathComponent) 位于受系统保护的位置（微信 / QQ 等应用的文件夹），PeaZip 没有读取权限。\n\n打开「系统设置 → 隐私与安全性 → 完全磁盘访问权限」，点 + 添加 PeaZip 并打开开关，之后重新打开这个压缩包。")
+                        detail: "\(archive.lastPathComponent) 位于受系统保护的位置（微信 / QQ 等应用的文件夹），Zuno 没有读取权限。\n\n打开「系统设置 → 隐私与安全性 → 完全磁盘访问权限」，点 + 添加 Zuno 并打开开关，之后重新打开这个压缩包。")
                     appLog.notice("读取被系统拦截，已提示用户授权完全磁盘访问")
                 }
                 self.items = items

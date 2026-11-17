@@ -22,6 +22,7 @@ enum ArchiveEngine {
             // its bundle) still finds the engine the installed app carries. Without this
             // the fallback list only knew the ORIGINAL PeaZip's layout, so the engine
             // looked missing even on a machine where the app was installed.
+            "/Applications/Zuno.app/Contents/Resources/bin/7z/7z",
             "/Applications/PeaZip.app/Contents/Resources/bin/7z/7z",
             // original PeaZip / upstream layouts
             "/Applications/PeaZip.app/Contents/MacOS/bin/7z/7z",

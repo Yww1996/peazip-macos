@@ -2,7 +2,7 @@
 
 应用更新来自本仓库 Releases，与 PeaZip 上游的“引擎更新”是两个入口。
 Sparkle 2.10.1 负责检查、下载、签名校验、替换与重启。默认每天自动检查，
-不会静默安装；用户可在设置 → 通用关闭自动检查，也可从 PeaZip 菜单手动检查。
+不会静默安装；用户可在设置 → 通用关闭自动检查，也可从 Zuno 菜单手动检查。
 压缩、解压及引擎更新期间，推迟安装重启至任务完成。
 
 ## 一次性签名配置
@@ -40,7 +40,7 @@ SPARKLE_PRIVATE_KEY_FILE="$PWD/.update-signing/ed25519.private-key" \
 ```
 
 脚本会打包生产 app，嵌入 Sparkle.framework（保留软链接与权限），校验签名，
-运行引擎自检，产出 `build/release/PeaZip-版本.zip`、`appcast.xml`、`SHA256SUMS`。
+运行引擎自检，产出 `build/release/Zuno-版本.zip`、`appcast.xml`、`SHA256SUMS`。
 发布用生产标识始终是 `com.yww.pea27`，不会把开发标识安装给用户。
 ZIP 与 feed 都经 Ed25519 签名。脚本还会用 app 内嵌公钥独立验签，
 避免误用另一把私钥发布一个用户无法安装的版本。
@@ -56,20 +56,20 @@ Feed 保留 `<sparkle:informationalUpdate><sparkle:belowVersion>44`：
 44 及以后继续正常应用内下载安装。后续发布不要删除这个旧版恢复规则。
 
 3. 将 ZIP、appcast.xml、SHA256SUMS 上传至同一个 GitHub Release，设为最新稳定版。
-   标签必须是 `v显示版本`（例如 `v0.41`），以匹配 appcast 中的下载地址。
+   标签必须是 `v显示版本`（例如 `v0.47`），以匹配 appcast 中的下载地址。
    可以先创建草稿进行检查，检查后再发布：
 
 ```sh
-gh release create v0.41 build/release/PeaZip-0.41.zip \
+gh release create v0.47 build/release/Zuno-0.47.zip \
   build/release/appcast.xml build/release/SHA256SUMS \
-  --draft --title 'PeaZip 0.41' --notes-file assets/updates/release-notes.md
-gh release edit v0.41 --draft=false --latest
+  --draft --title 'Zuno 0.47' --notes-file assets/updates/release-notes.md
+gh release edit v0.47 --draft=false --latest
 ```
 
-feed 固定为 `https://github.com/Yww1996/peazip-macos/releases/latest/download/appcast.xml`。
+feed 固定为 `https://github.com/Yww1996/zuno/releases/latest/download/appcast.xml`。
 每个后续稳定 Release 都必须携带 appcast.xml；不要只上传 ZIP。
 更改任何已签名的 ZIP 或 XML 后，必须重新运行发布脚本。
-首次安装 0.41 仍需手动替换，后续版本才可在 app 内更新。
+0.44 及以后可在 app 内更新；更早版本请手动下载。更名兼容规则见 MIGRATION.md。
 
 ## 验证与当前分发限制
 

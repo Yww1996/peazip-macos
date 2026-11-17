@@ -10,11 +10,11 @@ if [ "${SKIP_BUILD:-0}" != "1" ]; then
 fi
 
 # Test the INSTALLED app by default — that is the one the user actually double-clicks.
-if [ -d "/Applications/PeaZip.app" ] && [ "${TEST_DEV_BUILD:-0}" != "1" ]; then
-  APP="/Applications/PeaZip.app"
+if [ -d "/Applications/Zuno.app" ] && [ "${TEST_DEV_BUILD:-0}" != "1" ]; then
+  APP="/Applications/Zuno.app"
   echo "  测试对象: 已安装的 $APP"
 else
-  APP="$PWD/build/PeaZip-dev.app"
+  APP="$PWD/build/Zuno-dev.app"
   echo "  测试对象: 开发构建 $APP"
 fi
 
@@ -28,8 +28,8 @@ ls -la /tmp/peatest/*.zip | sed 's/^/  /'
 
 echo
 echo "############ 3) 关掉旧实例 ############"
-osascript -e 'tell application "PeaZip" to quit' >/dev/null 2>&1 || true
-pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
+osascript -e 'tell application "Zuno" to quit' >/dev/null 2>&1 || true
+pkill -f "Contents/MacOS/Zuno" 2>/dev/null || true
 sleep 2
 
 echo
@@ -54,4 +54,4 @@ echo "############ 6) 系统是否已把本 app 登记为压缩包处理程序 #
 
 echo
 echo "############ 7) 进程仍健康 ############"
-ps -o pid,%cpu,stat -p $(pgrep -f "Contents/MacOS/PeaZip" | head -1) 2>/dev/null | sed 's/^/  /'
+ps -o pid,%cpu,stat -p $(pgrep -f "Contents/MacOS/Zuno" | head -1) 2>/dev/null | sed 's/^/  /'

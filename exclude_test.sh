@@ -3,8 +3,8 @@
 # several combinations, including the new hidden-file rule and custom patterns.
 set -uo pipefail
 cd "$(dirname "$0")"
-Z=/Applications/PeaZip.app/Contents/Resources/bin/7z/7z
-APP=/Applications/PeaZip.app
+Z=/Applications/Zuno.app/Contents/Resources/bin/7z/7z
+APP=/Applications/Zuno.app
 
 setup() {
   rm -rf /tmp/excl2 && mkdir -p /tmp/excl2/项目/{.git,src,node_modules,build}
@@ -20,16 +20,16 @@ setup() {
 }
 
 restart() {
-  pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
+  pkill -f "Contents/MacOS/Zuno" 2>/dev/null || true
   sleep 2
   open "$APP"
-  for _ in $(seq 1 24); do sleep 0.5; [ -n "$(pgrep -f 'Contents/MacOS/PeaZip')" ] && break; done
+  for _ in $(seq 1 24); do sleep 0.5; [ -n "$(pgrep -f 'Contents/MacOS/Zuno')" ] && break; done
   sleep 2
 }
 
 run_case() {                       # run_case <说明>
   rm -f /tmp/excl2/*.zip
-  swift tools/service_call.swift /tmp/excl2/项目 "用 PeaZip 压缩为 ZIP" >/dev/null 2>&1
+  swift tools/service_call.swift /tmp/excl2/项目 "用 Zuno 压缩为 ZIP" >/dev/null 2>&1
   sleep 7
   echo "  【$1】打包内容:"
   $Z l /tmp/excl2/项目.zip 2>/dev/null | grep -E "^[0-9]{4}-" | awk '{print "    " $NF}'
@@ -37,7 +37,7 @@ run_case() {                       # run_case <说明>
 
 echo "############ 启动 app ############"
 restart
-echo "  进程: $(pgrep -f 'Contents/MacOS/PeaZip' | head -1)"
+echo "  进程: $(pgrep -f 'Contents/MacOS/Zuno' | head -1)"
 
 setup
 echo

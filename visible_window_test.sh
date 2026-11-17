@@ -4,32 +4,32 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-vis() { swift tools/winlist.swift PeaZip 2>/dev/null | grep -c 'owner='; }
+vis() { swift tools/winlist.swift Zuno 2>/dev/null | grep -c 'owner='; }
 
 echo "=== 1) 全部退出，只开 GUI ==="
-osascript -e 'tell application "PeaZip" to quit' >/dev/null 2>&1 || true
-pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
+osascript -e 'tell application "Zuno" to quit' >/dev/null 2>&1 || true
+pkill -f "Contents/MacOS/Zuno" 2>/dev/null || true
 sleep 3
-open /Applications/PeaZip.app
+open /Applications/Zuno.app
 for _ in $(seq 1 20); do sleep 0.5; [ "$(vis)" -gt 0 ] && break; done
 sleep 2
 echo "   可见窗口数: $(vis)   ← 应为 1"
 
 echo
 echo "=== 2) 再跑一次 --selftest（同 bundle id 的第二个实例）==="
-/Applications/PeaZip.app/Contents/MacOS/PeaZip --selftest >/dev/null 2>&1
+/Applications/Zuno.app/Contents/MacOS/Zuno --selftest >/dev/null 2>&1
 sleep 3
 echo "   可见窗口数: $(vis)   ← 若变 0，则 selftest 是把窗口挤掉的原因"
 
 echo
 echo "=== 3) 再跑一次 --list 看看 ==="
-/Applications/PeaZip.app/Contents/MacOS/PeaZip --list /etc/hosts >/dev/null 2>&1
+/Applications/Zuno.app/Contents/MacOS/Zuno --list /etc/hosts >/dev/null 2>&1
 sleep 3
 echo "   可见窗口数: $(vis)"
 
 echo
 echo "=== 4) 重新激活 app，看窗口能不能回来 ==="
-open /Applications/PeaZip.app
+open /Applications/Zuno.app
 for _ in $(seq 1 20); do sleep 0.5; [ "$(vis)" -gt 0 ] && break; done
 sleep 2
 echo "   可见窗口数: $(vis)"

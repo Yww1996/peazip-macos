@@ -34,34 +34,34 @@ win_id() {
 import Quartz
 for w in Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly,
                                           Quartz.kCGNullWindowID):
-    if "PeaZip" in (w.get("kCGWindowOwnerName") or "") and w.get("kCGWindowLayer") == 0:
+    if "Zuno" in (w.get("kCGWindowOwnerName") or "") and w.get("kCGWindowLayer") == 0:
         print(w["kCGWindowNumber"]); break
 PY
 }
 
 shoot() {   # $1 = 输出文件名
   local id; id="$(win_id)"
-  [ -n "$id" ] || { echo "找不到 PeaZip 窗口" >&2; return 1; }
+  [ -n "$id" ] || { echo "找不到 Zuno 窗口" >&2; return 1; }
   screencapture -x -o -l "$id" "$OUT/$1"
   echo "  ✓ $OUT/$1"
 }
 
-quit_app() { osascript -e 'tell application "PeaZip" to quit' 2>/dev/null || true; sleep 2; }
+quit_app() { osascript -e 'tell application "Zuno" to quit' 2>/dev/null || true; sleep 2; }
 
 echo "① 浅色"
 quit_app
-open -na /Applications/PeaZip.app --args -AppleInterfaceStyle Light "$DEMO" 2>/dev/null || open -na /Applications/PeaZip.app
+open -na /Applications/Zuno.app --args -AppleInterfaceStyle Light "$DEMO" 2>/dev/null || open -na /Applications/Zuno.app
 sleep 4
 shoot "light.png"
 
 echo "② 深色"
 quit_app
-open -na /Applications/PeaZip.app --args -AppleInterfaceStyle Dark "$DEMO" 2>/dev/null || open -na /Applications/PeaZip.app
+open -na /Applications/Zuno.app --args -AppleInterfaceStyle Dark "$DEMO" 2>/dev/null || open -na /Applications/Zuno.app
 sleep 4
 shoot "dark.png"
 
 echo "③ 解压进行中（用访达服务触发一个大包，趁进度弹窗出现时抓）"
-swift tools/service_call.swift /tmp/演示包.zip "用 PeaZip 测试压缩包完整性" >/dev/null 2>&1 || true
+swift tools/service_call.swift /tmp/演示包.zip "用 Zuno 测试压缩包完整性" >/dev/null 2>&1 || true
 sleep 1
 shoot "extracting.png" || true
 

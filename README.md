@@ -1,12 +1,16 @@
 <div align="center">
 
-<img src="assets/readme/banner.png" alt="PeaZip macOS 原生前端：用 SwiftUI 重写界面，驱动内置的 7-Zip 26.02 引擎" width="100%">
+<img src="assets/readme/icon.png" alt="Zuno" width="96">
+
+# Zuno
+
+macOS 原生归档工具 · 原 peazip-macos 项目的延续
 
 <br>
 
 ![macOS 15+](https://img.shields.io/badge/macOS-15%2B-1B2534?style=flat-square)
 ![Swift 6](https://img.shields.io/badge/Swift-6.4-2C7BEA?style=flat-square)
-![version 0.46](https://img.shields.io/badge/version-0.46-0B4FC0?style=flat-square)
+![version 0.47](https://img.shields.io/badge/version-0.47-0B4FC0?style=flat-square)
 ![license MIT](https://img.shields.io/badge/license-MIT-4C8C4A?style=flat-square)
 
 </div>
@@ -18,7 +22,7 @@
 
 ## 这是什么
 
-一个 **macOS 原生的 PeaZip 前端**。界面用 SwiftUI 从头写，压缩解压交给**随包分发的 7-Zip 26.02 引擎**，装好后就是 `/Applications/PeaZip.app`，直接替换掉原来的 Lazarus/LCL 版本。
+**Zuno** 是此前 **peazip-macos（PeaZip 原生前端）** 的更名延续，保留原有代码历史与上游来源。界面用 SwiftUI 从头写，压缩解压交给**随包分发的 7-Zip 26.02 引擎**，装好后就是 `/Applications/Zuno.app`，可独立安装使用。
 
 不是套壳、不是脚本集合：文件浏览、压缩包内导航、包内增删、访达右键服务、设置窗口、引擎自更新都是原生控件实现，并且**自带引擎** —— 不依赖系统里装过什么压缩软件。
 
@@ -46,23 +50,25 @@
 | **受保护位置自动处理** | 微信 / QQ 等应用文件夹系统禁止写入 —— 自动改到 `~/Downloads` 并说明原因，而不是抛一个 `status=2` |
 | **排除规则** | macOS 垃圾文件、隐藏文件（默认开）、Windows 冗余文件、自定义通配符 |
 | **引擎自更新** | 从 PeaZip 官方发布版拉取并替换内置引擎，先验后用、失败回滚 |
-| **应用自动更新** | 从本仓库 GitHub Releases 获取新版，通过 Sparkle 校验签名、下载并安装；设置 → 通用可关闭自动检查，PeaZip 菜单可手动检查 |
+| **应用自动更新** | 从本仓库 GitHub Releases 获取新版，通过 Sparkle 校验签名、下载并安装；设置 → 通用可关闭自动检查，Zuno 菜单可手动检查 |
 | **完整中文界面** | 包括标准菜单栏在内，`CFBundleDevelopmentRegion` + `.lproj` 落地 |
 | 其他 | 安全删除（多遍覆写）、格式转换、完整性测试、搜索、排序、隐藏文件开关 |
 
 ## 安装
 
-也可在 [Releases](https://github.com/Yww1996/peazip-macos/releases/latest) 下载 ZIP，解压后把 `PeaZip.app` 放入“应用程序”。0.40 及更早版本需要手动安装 0.41 一次，之后可通过软件内“检查应用更新…”更新。默认自动检查，安装前征求确认；归档或引擎更新期间会等待任务结束再重启。
+也可在 [Releases](https://github.com/Yww1996/zuno/releases/latest) 下载 ZIP，解压后把 `Zuno.app` 放入“应用程序”。0.44 及以后版本可通过软件内“检查应用更新…”升级；更早版本请手动下载。默认自动检查，安装前征求确认；归档或引擎更新期间会等待任务结束再重启。
+
+更名兼容说明见 [MIGRATION.md](MIGRATION.md)。旧版本自动更新后，外层文件名可能仍为 `PeaZip.app`，界面与服务名称会显示 Zuno。
 
 以下为从源码安装：
 
 需要 macOS 15+ 与 Swift 6 工具链。
 
 ```bash
-git clone https://github.com/Yww1996/peazip-macos.git
-cd peazip-macos
-./package.sh     # 构建 release → 组装 build/PeaZip-dev.app → 签名 → 启动并验证窗口
-./install.sh     # 安装到 /Applications/PeaZip.app（备份原版，不删除）
+git clone https://github.com/Yww1996/zuno.git
+cd zuno
+./package.sh     # 构建 release → 组装 build/Zuno-dev.app → 签名 → 启动并验证窗口
+./install.sh     # 安装到 /Applications/Zuno.app（备份同一应用的旧安装，保留上游 PeaZip）
 ```
 
 两个脚本都会先 `swift build`，并在打包后**比对 md5**。安装脚本还会自动核验：内置引擎可执行、指向的是内置副本而不是系统里别的 PeaZip、归档往返自测通过。
@@ -99,7 +105,7 @@ tools/                     无头验证工具（窗口检查、图标导出、�
 不点界面也能验证，适合改完代码自己跑一遍：
 
 ```bash
-APP=/Applications/PeaZip.app/Contents/MacOS/PeaZip
+APP=/Applications/Zuno.app/Contents/MacOS/Zuno
 
 $APP --selftest              # 引擎可用性：打包 → 测试 → 列表 → 解压 → 逐字节比对
 $APP --list <压缩包>         # 解析压缩包、显示根目录、逐层下钻

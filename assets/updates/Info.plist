@@ -7,7 +7,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://github.com/Yww1996/peazip-macos/releases/latest/download/appcast.xml</string>
+	<string>https://github.com/Yww1996/zuno/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>NcKng57Yo6/ESpE90NVO0M2ivQHQdKfteJjzohdaGVY=</string>
 	<key>SURequireSignedFeed</key>

@@ -1,135 +1,57 @@
 #!/bin/bash
-# Install the new front-end as /Applications/PeaZip.app, taking over the name from the
-# original LCL PeaZip. The original is MOVED to the Desktop as a backup, never deleted —
-# but the app no longer needs it, because the archiver engine is bundled inside.
-set -uo pipefail
+# Install Zuno transactionally; preserve unrelated upstream PeaZip installations.
+set -euo pipefail
 cd "$(dirname "$0")"
-
-SRC="$PWD/build/PeaZip.app"
-DEST="/Applications/PeaZip.app"
-ORIG="/Applications/PeaZip.app"
-BACKUP="$HOME/Desktop/PeaZip-原版备份.app"
-
-echo "############ 1) 构建 ############"
-if ! bash package.sh 2>&1 | grep -E "二进制一致|图标|引擎|签名校验|主窗口|❌" | sed 's/^/  /'; then
-  echo "❌ 打包或验证失败，保留当前安装。"
+HEADLESS_PACKAGE=1 bash package.sh
+SRC="$PWD/build/Zuno.app"
+DEST=/Applications/Zuno.app
+LEGACY=/Applications/PeaZip.app
+PB=/usr/libexec/PlistBuddy
+OUR_ID=com.yww.pea27
+LSREG=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+identity() { "$PB" -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist"; }
+[ "$(identity "$SRC")" = "$OUR_ID" ]
+codesign --verify --deep --strict "$SRC"
+if [ -e "$DEST" ] && [ "$(identity "$DEST")" != "$OUR_ID" ]; then
+  echo "Zuno.app 已被其他应用占用，保留当前安装。" >&2
   exit 1
 fi
-[ -d "$SRC" ] || { echo "❌ 没有 $SRC"; exit 1; }
-
-echo
-echo "############ 2) 备份原版（不删除、不覆盖已有备份）############"
-# pkill, not osascript quit: an Apple Event aimed at a stopped app STARTS it and then
-# quits it, so the queued quit lands on the instance launched moments later and the app
-# appears to die on startup.
-pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
-for _ in $(seq 1 20); do
-    pgrep -f "Contents/MacOS/PeaZip" >/dev/null || break
-    sleep 0.5
-done
-# Match on the executable path, NOT on the .app folder name: the installed copy is
-# PeaZip.app while the dev build is PeaZip27.app, and a pattern tied to either one
-# silently matches nothing after the rename.
-pkill -f "Contents/MacOS/PeaZip" 2>/dev/null || true
-pkill -x peazip 2>/dev/null || true
-sleep 2
-
-PB=/usr/libexec/PlistBuddy
-OUR_ID="com.yww.pea27"
-
-if [ ! -d "$ORIG" ]; then
-  echo "  （/Applications 里没有 PeaZip.app，跳过）"
-else
-  ORIG_ID=$("$PB" -c "Print :CFBundleIdentifier" "$ORIG/Contents/Info.plist" 2>/dev/null || echo "?")
-  if [ "$ORIG_ID" = "$OUR_ID" ]; then
-    # Re-running this script must NOT treat our own installed copy as "the original".
-    # That exact confusion moved the newly installed app into the backup slot and
-    # wiped the real backup — so identity is checked, never assumed from the path.
-    echo "  /Applications/PeaZip.app 是本 app 的旧安装（${ORIG_ID}），直接替换，不碰备份"
-    rm -rf "$ORIG"
-  elif [ -e "$BACKUP" ]; then
-    echo "  ⚠️  $BACKUP 已存在 —— 不覆盖（那正是上一次把备份弄丢的原因）"
-    echo "      原版仍在 /Applications，未做任何移动。请先处理备份位再运行。"
-    exit 1
-  else
-    mv "$ORIG" "$BACKUP" && echo "  ✅ 原版（${ORIG_ID}）已移到 $BACKUP" || { echo "  ❌ 移不动原版"; exit 1; }
+# Refuse replacement while an installed copy is running, rather than terminating work.
+if pgrep -f '^/Applications/(Zuno|PeaZip)\.app/Contents/MacOS/(Zuno|PeaZip)( |$)' >/dev/null; then
+  echo "请先退出已安装的应用，然后重新运行安装脚本。" >&2
+  exit 1
+fi
+STAGE=$(mktemp -d /Applications/.zuno-install.XXXXXX)
+BACKUP=""
+REPLACED=0
+cleanup() {
+  result=$?
+  if [ "$result" != 0 ] && [ "$REPLACED" = 1 ]; then
+    rm -rf "$DEST"
+    if [ -n "$BACKUP" ] && [ -d "$BACKUP/Zuno.app" ]; then mv "$BACKUP/Zuno.app" "$DEST"; fi
   fi
+  rm -rf "$STAGE"
+  exit "$result"
+}
+trap cleanup EXIT
+ditto "$SRC" "$STAGE/Zuno.app"
+codesign --verify --deep --strict "$STAGE/Zuno.app"
+BACKUP_ROOT="$HOME/Library/Application Support/Zuno/Install Backups"
+mkdir -p "$BACKUP_ROOT"
+BACKUP=$(mktemp -d "$BACKUP_ROOT/install.XXXXXX")
+if [ -e "$DEST" ]; then mv "$DEST" "$BACKUP/Zuno.app"; fi
+REPLACED=1
+mv "$STAGE/Zuno.app" "$DEST"
+codesign --verify --deep --strict "$DEST"
+REPLACED=0
+if [ -d "$LEGACY" ] && [ "$(identity "$LEGACY")" = "$OUR_ID" ]; then
+  "$LSREG" -u "$LEGACY" 2>/dev/null || true
+  mv "$LEGACY" "$BACKUP/PeaZip.app"
 fi
-
-echo
-echo "############ 3) 安装新 app ############"
-rm -rf "$DEST"
-ditto "$SRC" "$DEST" || { echo "❌ 复制失败"; exit 1; }
-# Take over the name: Finder/Dock/menu bar should all say "PeaZip", matching the request
-# to replace the original. CFBundleExecutable is PeaZip, matching the bundle name (the plist
-# key still points at the real file name).
-PB="/usr/libexec/PlistBuddy"
-# The production bundle is installed as-is: its bundle id is the real one (TCC grants, the
-# default-handler choice and the Finder services are all keyed to it) and it carries the
-# NSServices the user actually needs.
-/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier com.yww.pea27" "$DEST/Contents/Info.plist" 2>/dev/null || true
-"$PB" -c "Set :CFBundleName PeaZip" "$DEST/Contents/Info.plist"
-"$PB" -c "Set :CFBundleDisplayName PeaZip" "$DEST/Contents/Info.plist"
-codesign --force --deep --sign - "$DEST" >/dev/null 2>&1
-codesign -v "$DEST" 2>/dev/null && echo "  已安装并签名: $DEST" || echo "  ⚠️ 签名校验未过"
-
-# ---------------------------------------------------------------------------------------
-# Unregister and remove BOTH build-time bundles. They must not linger: any registered copy
-# of the app — even one with NSServices stripped — makes the system list every PeaZip
-# service twice in the right-click menu, once as "(PeaZip)" and once as "(PeaZip-dev)".
-# The install source is assets/ + these scripts; build/ is regenerated on every run.
-# ---------------------------------------------------------------------------------------
-LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-for b in "$PWD/build/PeaZip.app" "$PWD/build/PeaZip-dev.app"; do
-  [ -e "$b" ] || continue
-  "$LSREG" -u "$b" 2>/dev/null || true
-  rm -rf "$b"
+for copy in "$BACKUP/Zuno.app" "$BACKUP/PeaZip.app" "$SRC" "$PWD/build/Zuno-dev.app"; do
+  [ ! -d "$copy" ] || "$LSREG" -u "$copy" 2>/dev/null || true
 done
-echo "  已清理构建产物（避免右键菜单里服务重复）"
-echo "  CFBundleName = $("$PB" -c "Print :CFBundleName" "$DEST/Contents/Info.plist")"
-
-echo
-echo "############ 4) 让 LaunchServices 重新登记 ############"
-LSREG=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 "$LSREG" -f "$DEST"
-"$LSREG" -f "$BACKUP" 2>/dev/null || true
-# The local build shares the installed app's bundle identifier, so without this the
-# Finder's "Open With" list can offer the copy under ~/Desktop (which may later be moved
-# or deleted, leaving a broken entry). Only the installed app should be advertised.
-"$LSREG" -u "$SRC" 2>/dev/null || true
-echo "  已登记 $DEST；已注销开发副本"
-
-echo
-echo "############ 5) 从 /Applications 启动 ############"
+echo "已安装：$DEST"
+echo "旧安装备份：$BACKUP"
 open "$DEST"
-PID=""
-for _ in $(seq 1 24); do sleep 0.5; PID=$(pgrep -f "Contents/MacOS/PeaZip" | head -1); [ -n "$PID" ] && break; done
-echo "  PID: ${PID:-未启动}"
-[ -z "$PID" ] && { echo "❌ 启动失败"; exit 1; }
-
-echo
-echo "############ 6) 窗口 ############"
-for _ in $(seq 1 24); do
-  sleep 0.5
-  W=$(swift tools/winlist.swift PeaZip --all 2>/dev/null | grep -i "owner=PeaZip" | grep -oE '[0-9]+x[0-9]+' | awk -Fx '{print $1*$2, $0}' | sort -rn | head -1 | cut -d' ' -f2-)
-  [ -n "$W" ] && break
-done
-if [ -n "$W" ]; then
-  echo "  ✅ 主窗口 ${W}（可见窗口数: $(swift tools/winlist.swift PeaZip 2>/dev/null | grep -c 'owner=')）"
-else
-  echo "  ❌ 无窗口"
-fi
-
-echo
-echo "############ 7) 引擎是否指向内置副本（关键）############"
-sleep 2
-log show --last 60s --predicate 'subsystem == "com.yww.pea27"' --style compact 2>/dev/null \
-  | grep "launched" | tail -1 | sed 's/.*] /  /'
-
-echo
-echo "############ 8) 归档往返自检（原版已不在 /Applications）############"
-"$DEST/Contents/MacOS/PeaZip" --selftest 2>/dev/null | grep -E "7z 引擎|归档引擎|❌" | sed 's/^/  /'
-
-echo
-echo "############ 9) 最终状态 ############"
-ls -d /Applications/PeaZip.app "$BACKUP" 2>/dev/null | sed 's/^/  /'

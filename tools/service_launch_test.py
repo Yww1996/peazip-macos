@@ -11,15 +11,15 @@ work = repo / "build/service-launch-test"
 if work.exists():
     shutil.rmtree(work)
 work.mkdir(parents=True)
-app = work / "PeaZipLaunchProbe.app"
-shutil.copytree(repo / "build/PeaZip.app", app, symlinks=True)
-executable = app / "Contents/MacOS/PeaZip"
+app = work / "ZunoLaunchProbe.app"
+shutil.copytree(repo / "build/Zuno.app", app, symlinks=True)
+executable = app / "Contents/MacOS/Zuno"
 shutil.copy2(repo / ".build/debug/PeaZip27", executable)
 info_path = app / "Contents/Info.plist"
 info = plistlib.loads(info_path.read_bytes())
 info.pop("NSServices", None)
 info.pop("CFBundleDocumentTypes", None)
-info["CFBundleName"] = "PeaZipLaunchProbe"
+info["CFBundleName"] = "ZunoLaunchProbe"
 info["SUEnableAutomaticChecks"] = False
 
 source = work / "内容.txt"

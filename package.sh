@@ -13,18 +13,18 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # Two bundles, two jobs.
-#   build/PeaZip.app      the production bundle — what install.sh copies to /Applications
-#   build/PeaZip-dev.app  a throwaway copy for this script's own launch checks, with its own
+#   build/Zuno.app      the production bundle — what install.sh copies to /Applications
+#   build/Zuno-dev.app  a throwaway copy for this script's own launch checks, with its own
 #                         bundle id and WITHOUT NSServices. Same-identity twins get terminated
 #                         by macOS, and a dev copy that advertises the Finder services shows up
 #                         in the right-click menu as a duplicate of every service.
-APP="build/PeaZip.app"
-DEV="build/PeaZip-dev.app"
+APP="build/Zuno.app"
+DEV="build/Zuno-dev.app"
 # Two different names on purpose: SwiftPM emits PeaZip27 (the target name), while the
-# executable INSIDE the bundle is PeaZip — that is what Activity Monitor and the Force Quit
+# executable INSIDE the bundle is Zuno — that is what Activity Monitor and the Force Quit
 # window show, and "PeaZip27" there was a leftover from when the app was called "PeaZip 27".
 PRODUCT="PeaZip27"
-EXE="PeaZip"
+EXE="Zuno"
 
 echo "=== 0) 构建（必须是新二进制，否则后面所有验证都是假的）==="
 if [ "${HEADLESS_PACKAGE:-0}" = 1 ]; then
@@ -97,15 +97,15 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleExecutable</key><string>PeaZip</string>
+    <key>CFBundleExecutable</key><string>Zuno</string>
     <!-- The production identity must survive an in-app update. Only DEV is renamed. -->
     <key>CFBundleIdentifier</key><string>com.yww.pea27</string>
-    <key>CFBundleName</key><string>PeaZip</string>
-    <key>CFBundleDisplayName</key><string>PeaZip</string>
+    <key>CFBundleName</key><string>Zuno</string>
+    <key>CFBundleDisplayName</key><string>Zuno</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.46</string>
-    <key>CFBundleVersion</key><string>46</string>
+    <key>CFBundleShortVersionString</key><string>0.47</string>
+    <key>CFBundleVersion</key><string>47</string>
     <key>LSMinimumSystemVersion</key><string>15.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
     <!-- Without CFBundleDevelopmentRegion, AppKit falls back to region "en" and renders
@@ -124,45 +124,45 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
              NSRequiredContext keeps the items out of text-only contexts. -->
         <dict>
             <key>NSMenuItem</key>
-            <dict><key>default</key><string>用 PeaZip 压缩为 ZIP</string></dict>
+            <dict><key>default</key><string>用 Zuno 压缩为 ZIP</string></dict>
             <key>NSMessage</key><string>peaCompressZIP</string>
-            <key>NSPortName</key><string>PeaZip</string>
+            <key>NSPortName</key><string>Zuno</string>
             <key>NSRequiredContext</key>
             <dict><key>NSTextContent</key><string>FilePath</string></dict>
             <key>NSSendTypes</key><array><string>NSFilenamesPboardType</string></array>
         </dict>
         <dict>
             <key>NSMenuItem</key>
-            <dict><key>default</key><string>用 PeaZip 压缩为 7z</string></dict>
+            <dict><key>default</key><string>用 Zuno 压缩为 7z</string></dict>
             <key>NSMessage</key><string>peaCompress7Z</string>
-            <key>NSPortName</key><string>PeaZip</string>
+            <key>NSPortName</key><string>Zuno</string>
             <key>NSRequiredContext</key>
             <dict><key>NSTextContent</key><string>FilePath</string></dict>
             <key>NSSendTypes</key><array><string>NSFilenamesPboardType</string></array>
         </dict>
         <dict>
             <key>NSMenuItem</key>
-            <dict><key>default</key><string>用 PeaZip 解压到新文件夹</string></dict>
+            <dict><key>default</key><string>用 Zuno 解压到新文件夹</string></dict>
             <key>NSMessage</key><string>peaExtract</string>
-            <key>NSPortName</key><string>PeaZip</string>
+            <key>NSPortName</key><string>Zuno</string>
             <key>NSRequiredContext</key>
             <dict><key>NSTextContent</key><string>FilePath</string></dict>
             <key>NSSendTypes</key><array><string>NSFilenamesPboardType</string></array>
         </dict>
         <dict>
             <key>NSMenuItem</key>
-            <dict><key>default</key><string>用 PeaZip 解压到桌面</string></dict>
+            <dict><key>default</key><string>用 Zuno 解压到桌面</string></dict>
             <key>NSMessage</key><string>peaExtractDesktop</string>
-            <key>NSPortName</key><string>PeaZip</string>
+            <key>NSPortName</key><string>Zuno</string>
             <key>NSRequiredContext</key>
             <dict><key>NSTextContent</key><string>FilePath</string></dict>
             <key>NSSendTypes</key><array><string>NSFilenamesPboardType</string></array>
         </dict>
         <dict>
             <key>NSMenuItem</key>
-            <dict><key>default</key><string>用 PeaZip 测试压缩包完整性</string></dict>
+            <dict><key>default</key><string>用 Zuno 测试压缩包完整性</string></dict>
             <key>NSMessage</key><string>peaTest</string>
-            <key>NSPortName</key><string>PeaZip</string>
+            <key>NSPortName</key><string>Zuno</string>
             <key>NSRequiredContext</key>
             <dict><key>NSTextContent</key><string>FilePath</string></dict>
             <key>NSSendTypes</key><array><string>NSFilenamesPboardType</string></array>
@@ -282,12 +282,12 @@ for _ in $(seq 1 24); do
   # --all also lists SwiftUI's off-screen menu/toolbar helper windows (e.g. 1920x30),
   # so pick the largest by area rather than the first line — otherwise this reports a
   # nonsense size for a perfectly good window.
-  FOUND=$(swift tools/winlist.swift PeaZip --all 2>/dev/null | grep -i "owner=PeaZip" \
+  FOUND=$(swift tools/winlist.swift Zuno --all 2>/dev/null | grep -i "owner=Zuno" \
           | grep -oE '[0-9]+x[0-9]+' | awk -Fx '{print $1*$2, $0}' | sort -rn | head -1 | cut -d' ' -f2- || true)
   [ -n "$FOUND" ] && break
 done
 if [ -n "$FOUND" ]; then
-  echo "  ✅ 主窗口 ${FOUND}（可见窗口数: $(swift tools/winlist.swift PeaZip 2>/dev/null | grep -c 'owner=')）"
+  echo "  ✅ 主窗口 ${FOUND}（可见窗口数: $(swift tools/winlist.swift Zuno 2>/dev/null | grep -c 'owner=')）"
 else
   echo "  ❌ 未找到窗口"
   swift tools/winlist.swift --all 2>/dev/null | head -5
@@ -298,7 +298,7 @@ echo
 echo "=== 6) 稳定性 ==="
 sleep 4
 ps -o pid,%cpu,%mem,stat,etime -p "$PID" 2>/dev/null || { echo "  ❌ 进程已退出"; exit 1; }
-swift tools/winlist.swift PeaZip --all 2>/dev/null | grep -qi "owner=PeaZip" \
+swift tools/winlist.swift Zuno --all 2>/dev/null | grep -qi "owner=Zuno" \
   && echo "  ✅ 窗口仍在" || echo "  ❌ 窗口消失"
 
 echo

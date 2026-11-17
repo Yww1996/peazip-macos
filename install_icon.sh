@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 
 VARIANT=${1:-A_blue}
 SRC="$HOME/Developer/PeaZip-design/design/png5/$VARIANT"
-APP=/Applications/PeaZip.app
+APP=/Applications/Zuno.app
 WORK=/tmp/pz_icon_build
 
 [ -d "$SRC" ] || { echo "找不到渲染结果: $SRC"; exit 1; }

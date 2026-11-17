@@ -217,7 +217,7 @@ struct SettingsView: View {
                     .disabled(!appUpdater.canCheckForUpdates && appUpdater.installationProblem == nil)
                 Text(appUpdater.installationProblem ?? (appUpdater.waitingForTasks
                      ? "更新已准备好，等待当前任务结束后安装并重启。"
-                     : "从 GitHub 获取 PeaZip 新版本，安装前会征求确认。"))
+                     : "从 GitHub 获取 Zuno 新版本，安装前会征求确认。"))
                     .font(.system(size: 11.5)).foregroundStyle(.secondary)
             }
         }
@@ -230,7 +230,7 @@ struct SettingsView: View {
             LabeledContent("右键「服务」菜单") {
                 Button("打开系统服务设置") { openServiceSettings() }
             }
-            Text("勾选「用 PeaZip …」五项后，在访达里选中文件右键 → 服务 即可直接压缩/解压。")
+            Text("勾选「用 Zuno …」五项后，在访达里选中文件右键 → 服务 即可直接压缩/解压。")
                 .font(.caption).foregroundStyle(.secondary)
 
             Divider()

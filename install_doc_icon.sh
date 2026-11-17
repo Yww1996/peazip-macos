@@ -9,7 +9,7 @@ set -uo pipefail
 cd "$(dirname "$0")"
 
 SRC="$HOME/Developer/PeaZip-design/design/png5doc/PeaZipArch"
-APP=/Applications/PeaZip.app
+APP=/Applications/Zuno.app
 WORK=/tmp/pz_docicon_build
 KEY=ArchIcon
 

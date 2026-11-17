@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ "${SKIP_BUILD:-0}" != 1 ]; then HEADLESS_PACKAGE=1 bash package.sh; fi
-APP="$PWD/build/PeaZip.app"
+APP="$PWD/build/Zuno.app"
 PB=/usr/libexec/PlistBuddy
 VERSION=$("$PB" -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")
 BUILD=$("$PB" -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")
@@ -19,7 +19,7 @@ if [ -n "${SPARKLE_PRIVATE_KEY_FILE:-}" ]; then
 fi
 OUT="$PWD/build/release"
 mkdir -p "$OUT"
-ZIP="$OUT/PeaZip-$VERSION.zip"
+ZIP="$OUT/Zuno-$VERSION.zip"
 rm -f "$ZIP"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 bash tools/verify-release-extraction.sh "$APP" "$ZIP"
@@ -40,11 +40,11 @@ sparkle = 'http://www.andymatuschak.org/xml-namespaces/sparkle'
 ET.register_namespace('sparkle', sparkle)
 root = ET.Element('rss', version='2.0')
 channel = ET.SubElement(root, 'channel')
-ET.SubElement(channel, 'title').text = 'PeaZip macOS'
-ET.SubElement(channel, 'link').text = 'https://github.com/Yww1996/peazip-macos'
+ET.SubElement(channel, 'title').text = 'Zuno'
+ET.SubElement(channel, 'link').text = 'https://github.com/Yww1996/zuno'
 ET.SubElement(channel, 'language').text = 'zh-cn'
 item = ET.SubElement(channel, 'item')
-ET.SubElement(item, 'title').text = f'PeaZip {version}'
+ET.SubElement(item, 'title').text = f'Zuno {version}'
 ET.SubElement(item, 'pubDate').text = format_datetime(datetime.now(timezone.utc))
 ET.SubElement(item, f'{{{sparkle}}}version').text = build
 ET.SubElement(item, f'{{{sparkle}}}shortVersionString').text = version
@@ -54,11 +54,11 @@ ET.SubElement(item, f'{{{sparkle}}}minimumSystemVersion').text = '15.0'
 # Keep this cutoff in future feeds: builds 44+ retain normal in-app installation.
 informational = ET.SubElement(item, f'{{{sparkle}}}informationalUpdate')
 ET.SubElement(informational, f'{{{sparkle}}}belowVersion').text = '44'
-ET.SubElement(item, 'link').text = f'https://github.com/Yww1996/peazip-macos/releases/tag/v{version}'
+ET.SubElement(item, 'link').text = f'https://github.com/Yww1996/zuno/releases/tag/v{version}'
 notes = Path('assets/updates/release-notes.md').read_text()
 ET.SubElement(item, 'description').text = '<pre>' + escape(notes) + '</pre>'
 ET.SubElement(item, 'enclosure', {
-    'url': f'https://github.com/Yww1996/peazip-macos/releases/download/v{version}/PeaZip-{version}.zip',
+    'url': f'https://github.com/Yww1996/zuno/releases/download/v{version}/Zuno-{version}.zip',
     f'{{{sparkle}}}edSignature': signature, 'length': length, 'type': 'application/octet-stream'
 })
 ET.indent(root)
@@ -68,6 +68,6 @@ PY
 # The client requires signed feeds as well as signed archives.
 "$SIGN" "${KEY_ARGS[@]}" "$OUT/appcast.xml"
 "$SIGN" "${KEY_ARGS[@]}" --verify "$OUT/appcast.xml"
-(cd "$OUT" && shasum -a 256 "PeaZip-$VERSION.zip" > SHA256SUMS)
+(cd "$OUT" && shasum -a 256 "Zuno-$VERSION.zip" > SHA256SUMS)
 echo "Ready: $ZIP and $OUT/appcast.xml"
 echo "Upload BOTH files to the same GitHub release; publish it as the latest stable release."
